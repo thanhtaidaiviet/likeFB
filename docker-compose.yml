@@ -1,0 +1,17 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: likefb-postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: likefb
+      POSTGRES_USER: likefb
+      POSTGRES_PASSWORD: likefb_password
+    volumes:
+      - likefb_pg_data:/var/lib/postgresql/data
+
+volumes:
+  likefb_pg_data:
+
