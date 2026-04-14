@@ -1,0 +1,21 @@
+.DS_Store
+.idea
+.vscode
+
+# env (never commit secrets)
+.env
+.env.*
+!.env.example
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Builds
+dist/
+build/
+.vite/
+
