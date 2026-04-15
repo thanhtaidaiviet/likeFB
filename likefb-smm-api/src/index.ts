@@ -2,6 +2,7 @@ import 'dotenv/config'
 import express from 'express'
 import cors from 'cors'
 import { z } from 'zod'
+import crypto from 'node:crypto'
 import { OAuth2Client } from 'google-auth-library'
 import { pool } from './db/pool.js'
 import { hashPassword, verifyPassword } from './auth/password.js'
@@ -34,9 +35,10 @@ app.post('/api/auth/register', async (req, res) => {
   const passwordHash = await hashPassword(password)
 
   try {
+    const id = crypto.randomUUID()
     const result = await pool.query(
-      'insert into users (email, password_hash) values ($1, $2) returning id, email, created_at',
-      [email.toLowerCase(), passwordHash],
+      'insert into users (id, email, password_hash) values ($1, $2, $3) returning id, email, created_at',
+      [id, email.toLowerCase(), passwordHash],
     )
     const row = result.rows[0] as { id: string; email: string }
     const token = signAccessToken({ sub: row.id, email: row.email })
@@ -99,6 +101,7 @@ app.post('/api/auth/google', async (req, res) => {
 
     // Upsert: prefer google_sub; if email already exists, attach google_sub.
     const lowerEmail = String(email).toLowerCase()
+    const newId = crypto.randomUUID()
     const dbRes = await pool.query(
       `
       with existing as (
@@ -114,8 +117,8 @@ app.post('/api/auth/google', async (req, res) => {
         returning id, email
       ),
       inserted as (
-        insert into users (email, google_sub)
-        select $2, $1
+        insert into users (id, email, google_sub)
+        select $3, $2, $1
         where not exists (select 1 from existing)
         returning id, email
       )
@@ -124,7 +127,7 @@ app.post('/api/auth/google', async (req, res) => {
       select * from inserted
       limit 1;
       `,
-      [sub, lowerEmail],
+      [sub, lowerEmail, newId],
     )
 
     const row = dbRes.rows[0] as { id: string; email: string } | undefined

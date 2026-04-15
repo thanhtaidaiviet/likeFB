@@ -3,7 +3,7 @@ import { pool } from './pool.js'
 
 const SQL = `
 create table if not exists users (
-  id uuid primary key default gen_random_uuid(),
+  id uuid primary key,
   email text not null unique,
   password_hash text,
   google_sub text,
@@ -44,8 +44,6 @@ end $$;
 `
 
 async function main() {
-  // pgcrypto provides gen_random_uuid()
-  await pool.query('create extension if not exists pgcrypto;')
   await pool.query(SQL)
   await pool.end()
   console.log('migrate: OK')
