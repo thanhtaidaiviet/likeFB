@@ -5,11 +5,14 @@ const { Pool } = pg
 let _pool: pg.Pool | null = null
 
 function shouldUseSsl(connectionString: string) {
+  // Vercel env is sometimes missing DATABASE_SSL; Supabase pooler requires TLS.
   if (process.env.DATABASE_SSL === 'true') return true
+  if (process.env.DATABASE_SSL === 'false') return false
   try {
     const url = new URL(connectionString)
     const sslmode = url.searchParams.get('sslmode')
     if (sslmode && sslmode !== 'disable') return true
+    if (url.hostname.endsWith('.supabase.com') || url.hostname.includes('supabase')) return true
   } catch {
     // ignore
   }
