@@ -5,6 +5,7 @@ import { getPool } from '../_lib/pool'
 import { hashPassword } from '../_lib/password'
 import { signAccessToken } from '../_lib/jwt'
 import { onlyMethods, sendJson } from '../_lib/http'
+import { describeDbError } from '../_lib/db-error'
 
 const registerSchema = z.object({
   email: z.string().email(),
@@ -31,12 +32,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return sendJson(res, 200, { token, user: { id: row.id, email: row.email } })
   } catch (err: any) {
     if (err?.code === '23505') return sendJson(res, 409, { error: 'EMAIL_EXISTS' })
-    if (typeof err?.message === 'string' && err.message.startsWith('CONFIG_ERROR:')) {
-      console.error(err)
-      return sendJson(res, 500, { error: 'CONFIG_ERROR' })
-    }
+    const hint = describeDbError(err)
     console.error(err)
-    return sendJson(res, 500, { error: 'SERVER_ERROR' })
+    if (hint.kind === 'config') return sendJson(res, 500, { error: 'CONFIG_ERROR', hint })
+    return sendJson(res, 500, { error: 'SERVER_ERROR', hint })
   }
 }
 
