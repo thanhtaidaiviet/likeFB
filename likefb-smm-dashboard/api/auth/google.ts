@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { z } from 'zod'
 import { OAuth2Client } from 'google-auth-library'
+import crypto from 'node:crypto'
 import { getPool } from '../_lib/pool'
 import { signAccessToken } from '../_lib/jwt'
 import { onlyMethods, sendJson } from '../_lib/http'
@@ -31,6 +32,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!sub || !email) return sendJson(res, 401, { error: 'INVALID_GOOGLE_TOKEN' })
 
     const lowerEmail = String(email).toLowerCase()
+    const newId = crypto.randomUUID()
     const dbRes = await getPool().query(
       `
       with existing as (
@@ -46,8 +48,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         returning id, email
       ),
       inserted as (
-        insert into users (email, google_sub)
-        select $2, $1
+        insert into users (id, email, google_sub)
+        select $3, $2, $1
         where not exists (select 1 from existing)
         returning id, email
       )
@@ -56,7 +58,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       select * from inserted
       limit 1;
       `,
-      [sub, lowerEmail],
+      [sub, lowerEmail, newId],
     )
 
     const row = dbRes.rows[0] as { id: string; email: string } | undefined

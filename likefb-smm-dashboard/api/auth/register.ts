@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { z } from 'zod'
+import crypto from 'node:crypto'
 import { getPool } from '../_lib/pool'
 import { hashPassword } from '../_lib/password'
 import { signAccessToken } from '../_lib/jwt'
@@ -20,9 +21,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const { email, password } = parsed.data
     const passwordHash = await hashPassword(password)
 
+    const id = crypto.randomUUID()
     const result = await getPool().query(
-      'insert into users (email, password_hash) values ($1, $2) returning id, email, created_at',
-      [email.toLowerCase(), passwordHash],
+      'insert into users (id, email, password_hash) values ($1, $2, $3) returning id, email, created_at',
+      [id, email.toLowerCase(), passwordHash],
     )
     const row = result.rows[0] as { id: string; email: string }
     const token = signAccessToken({ sub: row.id, email: row.email })
