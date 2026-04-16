@@ -7,12 +7,14 @@ export default function Header({
   activePlatform,
   mobileMenuItems,
   onMobileNavChange,
+  onTopupClick,
 }: {
   userName: string
   userRole: string
   activePlatform: string
   mobileMenuItems: NavItem[]
   onMobileNavChange: (value: string) => void
+  onTopupClick(): void
 }) {
   const initials = useMemo(() => {
     const parts = userName.trim().split(/\s+/)
@@ -31,6 +33,14 @@ export default function Header({
         </div>
 
         <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={onTopupClick}
+            className="inline-flex items-center justify-center rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
+          >
+            Nạp tiền
+          </button>
+
           <div className="lg:hidden">
             <label className="sr-only" htmlFor="platform">
               Nền tảng

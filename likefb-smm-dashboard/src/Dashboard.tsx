@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import Header from './components/Header'
 import OrderForm, { type OrderDraft } from './components/OrderForm'
 import Sidebar, { type NavItem } from './components/Sidebar'
+import TopupModal from './components/TopupModal'
 import UserPanel from './components/UserPanel'
 import { useAuth } from './auth/AuthContext'
 import { apiOrdersPlace, apiSmmServicesPublic } from './api/smm'
@@ -121,6 +122,7 @@ export default function Dashboard() {
   const [services, setServices] = useState<SmmService[]>([])
   const [servicesError, setServicesError] = useState<string | null>(null)
   const [servicesLoading, setServicesLoading] = useState(false)
+  const [topupOpen, setTopupOpen] = useState(false)
 
   const [draft, setDraft] = useState<OrderDraft>({
     search: '',
@@ -367,6 +369,7 @@ export default function Dashboard() {
             activePlatform={activeNav}
             mobileMenuItems={navItems}
             onMobileNavChange={(v) => handleNavChange(v as Platform)}
+            onTopupClick={() => setTopupOpen(true)}
           />
 
           <main className="px-4 py-6 sm:px-6">
@@ -483,6 +486,13 @@ export default function Dashboard() {
           </div>
         </aside>
       </div>
+
+      <TopupModal
+        open={topupOpen}
+        onClose={() => setTopupOpen(false)}
+        userId={status === 'authed' ? user?.id : undefined}
+        userEmail={status === 'authed' ? user?.email : undefined}
+      />
     </div>
   )
 }
