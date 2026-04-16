@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { getPool } from '../_lib/pool'
-import { verifyAccessToken } from '../_lib/jwt'
-import { bearerToken, onlyMethods, sendJson } from '../_lib/http'
+import { getPool } from '../_lib/pool.js'
+import { verifyAccessToken } from '../_lib/jwt.js'
+import { bearerToken, onlyMethods, sendJson } from '../_lib/http.js'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!onlyMethods(req, res, ['GET'])) return

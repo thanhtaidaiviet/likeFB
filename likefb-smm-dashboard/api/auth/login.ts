@@ -1,10 +1,10 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { z } from 'zod'
-import { getPool } from '../_lib/pool'
-import { verifyPassword } from '../_lib/password'
-import { signAccessToken } from '../_lib/jwt'
-import { onlyMethods, sendJson } from '../_lib/http'
-import { describeDbError } from '../_lib/db-error'
+import { getPool } from '../_lib/pool.js'
+import { verifyPassword } from '../_lib/password.js'
+import { signAccessToken } from '../_lib/jwt.js'
+import { onlyMethods, sendJson } from '../_lib/http.js'
+import { describeDbError } from '../_lib/db-error.js'
 
 const loginSchema = z.object({
   email: z.string().email(),

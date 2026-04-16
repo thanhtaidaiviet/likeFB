@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { onlyMethods, sendJson } from '../_lib/http'
-import { requireUser } from '../_lib/auth'
-import { smmApiKey, smmRequest } from '../_lib/smm'
+import { onlyMethods, sendJson } from '../_lib/http.js'
+import { requireUser } from '../_lib/auth.js'
+import { smmApiKey, smmRequest } from '../_lib/smm.js'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!onlyMethods(req, res, ['GET'])) return
