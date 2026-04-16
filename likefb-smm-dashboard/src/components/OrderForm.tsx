@@ -10,9 +10,6 @@ export type OrderDraft = {
   quantity: number
 }
 
-const platforms: Platform[] = ['Facebook', 'TikTok', 'Instagram', 'YouTube', 'X']
-const categories: Category[] = ['Followers', 'Likes', 'Views', 'Comments', 'Shares']
-
 function fieldLabel(s: string) {
   return (
     <div className="text-xs font-semibold uppercase tracking-wide text-slate-600">
@@ -34,6 +31,8 @@ export default function OrderForm({
   draft,
   onDraftChange,
   services,
+  platforms,
+  categories,
   selectedService,
   totalVnd,
   formatVnd,
@@ -45,6 +44,8 @@ export default function OrderForm({
   draft: OrderDraft
   onDraftChange: Dispatch<SetStateAction<OrderDraft>>
   services: SmmService[]
+  platforms: Platform[]
+  categories: Category[]
   selectedService: SmmService | null
   totalVnd: number
   formatVnd: (n: number) => string
@@ -84,6 +85,7 @@ export default function OrderForm({
                 onDraftChange((d) => ({
                   ...d,
                   platform: e.target.value as Platform,
+                  category: 'All',
                   serviceId: '',
                 }))
               }
@@ -112,7 +114,7 @@ export default function OrderForm({
             >
               {categories.map((c) => (
                 <option key={c} value={c}>
-                  {c}
+                  {c === 'All' ? 'Tất cả' : c}
                 </option>
               ))}
             </select>

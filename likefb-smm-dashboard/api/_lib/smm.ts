@@ -19,9 +19,13 @@ export function smmApiKey() {
 export async function smmRequest(params: Record<string, string>) {
   const body = new URLSearchParams(params)
 
+  const cookie = process.env.SMM_COOKIE
   const res = await fetch(smmApiUrl(), {
     method: 'POST',
-    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    headers: {
+      'content-type': 'application/x-www-form-urlencoded',
+      ...(cookie ? { cookie } : {}),
+    },
     body,
   })
 

@@ -15,9 +15,17 @@ export default defineConfig(({ mode }) => {
     },
     server: {
       proxy: {
+        // Express API (likefb-smm-api)
         '/api': {
           target: 'http://localhost:4000',
           changeOrigin: true,
+        },
+        // Panel API (vercel functions under likefb-smm-dashboard/api/smm/*)
+        // Usage: call /smm/* from frontend; proxy rewrites to /api/smm/* on the Vercel dev server.
+        '/smm': {
+          target: 'http://localhost:3000',
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/smm/, '/api/smm'),
         },
       },
     },

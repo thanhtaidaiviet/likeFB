@@ -1,6 +1,7 @@
 export type AuthUser = {
   id: string
   email: string
+  balanceVnd: number
 }
 
 type LoginResponse = { token: string; user: AuthUser }

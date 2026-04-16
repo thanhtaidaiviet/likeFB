@@ -51,7 +51,20 @@ export default function UserPanel({
           <Row label="Min" value={service ? service.min.toLocaleString('vi-VN') : '-'} />
           <Row label="Max" value={service ? service.max.toLocaleString('vi-VN') : '-'} />
           <Row label="Hoàn thành" value={service?.avgCompletion ?? '-'} />
-          <Row label="Ghi chú" value={service?.note ?? '-'} />
+
+          <div className="grid grid-cols-[110px_1fr] items-start gap-3">
+            <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Mô tả</div>
+            <div className="min-w-0 text-sm font-semibold text-slate-800">
+              {service?.desc ? (
+                <div
+                  className="break-words whitespace-normal [&_p]:m-0"
+                  dangerouslySetInnerHTML={{ __html: service.desc }}
+                />
+              ) : (
+                '-'
+              )}
+            </div>
+          </div>
         </div>
       </div>
     </div>

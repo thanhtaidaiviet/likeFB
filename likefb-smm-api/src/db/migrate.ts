@@ -7,10 +7,12 @@ create table if not exists users (
   email text not null unique,
   password_hash text,
   google_sub text,
+  balance_vnd bigint not null default 0,
   created_at timestamptz not null default now()
 );
 
 alter table users add column if not exists google_sub text;
+alter table users add column if not exists balance_vnd bigint not null default 0;
 
 -- Ensure password_hash can be null for Google accounts.
 do $$
@@ -41,6 +43,22 @@ begin
       );
   end if;
 end $$;
+
+create table if not exists orders (
+  id uuid primary key,
+  user_id uuid not null references users(id) on delete cascade,
+  smm_service_id text not null,
+  link text not null,
+  quantity integer not null,
+  panel_rate_vnd_per_1k numeric not null,
+  markup_multiplier numeric not null,
+  sell_total_vnd bigint not null,
+  smm_order_id text,
+  status text not null default 'created',
+  created_at timestamptz not null default now()
+);
+
+create index if not exists orders_user_id_created_at_idx on orders(user_id, created_at desc);
 `
 
 async function main() {
