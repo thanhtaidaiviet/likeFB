@@ -2,7 +2,7 @@ import type { SmmService } from '../types'
 
 export default function UserPanel({
   userName,
-  userId,
+  userId: _userId,
   balanceVnd,
   formatVnd,
   service,
@@ -21,7 +21,6 @@ export default function UserPanel({
             <div className="break-words text-sm font-semibold text-slate-900">
               {userName}
             </div>
-            <div className="break-words text-xs text-slate-500">ID: {userId}</div>
           </div>
           <div className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 ring-1 ring-inset ring-emerald-200">
             Online
@@ -36,7 +35,7 @@ export default function UserPanel({
             {formatVnd(balanceVnd)}
           </div>
           <div className="mt-2 text-xs text-slate-500">
-            Demo: số dư tự trừ sau khi đặt hàng.
+            Số dư tự trừ sau khi đặt hàng.
           </div>
         </div>
       </div>
@@ -53,19 +52,6 @@ export default function UserPanel({
           <Row label="Max" value={service ? service.max.toLocaleString('vi-VN') : '-'} />
           <Row label="Hoàn thành" value={service?.avgCompletion ?? '-'} />
           <Row label="Ghi chú" value={service?.note ?? '-'} />
-        </div>
-      </div>
-
-      <div className="rounded-xl border border-slate-200 bg-white p-4">
-        <div className="text-sm font-semibold text-slate-900">
-          Tài khoản
-        </div>
-        <div className="mt-2 text-sm text-slate-600">
-          - Xác minh: <span className="font-semibold text-slate-800">Đã</span>
-          <br />
-          - Level: <span className="font-semibold text-slate-800">Reseller</span>
-          <br />
-          - Chiết khấu: <span className="font-semibold text-slate-800">3%</span>
         </div>
       </div>
     </div>
