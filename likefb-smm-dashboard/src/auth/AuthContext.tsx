@@ -7,11 +7,13 @@ import {
   useState,
 } from 'react'
 import { apiGoogleLogin, apiLogin, apiMe, apiRegister, type AuthUser } from './api'
+import { useToast } from '../ui/toast'
 
 type AuthStatus = 'loading' | 'guest' | 'authed'
 
 type AuthContextValue = {
   status: AuthStatus
+  busy: boolean
   user: AuthUser | null
   token: string | null
   error: string | null
@@ -30,7 +32,9 @@ const AuthContext = createContext<AuthContextValue | null>(null)
 const TOKEN_KEY = 'likefb_token'
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const { toast } = useToast()
   const [status, setStatus] = useState<AuthStatus>('loading')
+  const [busy, setBusy] = useState(false)
   const [user, setUser] = useState<AuthUser | null>(null)
   const [token, setToken] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -68,7 +72,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = useCallback(async (email: string, password: string) => {
     setError(null)
-    setStatus('loading')
+    setBusy(true)
     try {
       const res = await apiLogin(email, password)
       localStorage.setItem(TOKEN_KEY, res.token)
@@ -76,17 +80,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(res.user)
       setStatus('authed')
       setLoginOpen(false)
+      toast({ kind: 'success', title: 'Đăng nhập thành công', description: res.user.email, durationMs: 3200 })
     } catch (e: any) {
       setError(e?.message || 'LOGIN_FAILED')
       setToken(null)
       setUser(null)
       setStatus('guest')
+    } finally {
+      setBusy(false)
     }
-  }, [])
+  }, [toast])
 
   const register = useCallback(async (email: string, password: string) => {
     setError(null)
-    setStatus('loading')
+    setBusy(true)
     try {
       const res = await apiRegister(email, password)
       localStorage.setItem(TOKEN_KEY, res.token)
@@ -94,17 +101,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(res.user)
       setStatus('authed')
       setLoginOpen(false)
+      toast({ kind: 'success', title: 'Tạo tài khoản thành công', description: res.user.email, durationMs: 3200 })
     } catch (e: any) {
       setError(e?.message || 'REGISTER_FAILED')
       setToken(null)
       setUser(null)
       setStatus('guest')
+    } finally {
+      setBusy(false)
     }
-  }, [])
+  }, [toast])
 
   const loginWithGoogle = useCallback(async (idToken: string) => {
     setError(null)
-    setStatus('loading')
+    setBusy(true)
     try {
       const res = await apiGoogleLogin(idToken)
       localStorage.setItem(TOKEN_KEY, res.token)
@@ -112,13 +122,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(res.user)
       setStatus('authed')
       setLoginOpen(false)
+      toast({ kind: 'success', title: 'Đăng nhập Google thành công', description: res.user.email, durationMs: 3200 })
     } catch (e: any) {
       setError(e?.message || 'LOGIN_FAILED')
       setToken(null)
       setUser(null)
       setStatus('guest')
+    } finally {
+      setBusy(false)
     }
-  }, [])
+  }, [toast])
 
   const openLogin = useCallback(() => {
     setError(null)
@@ -140,6 +153,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const value = useMemo<AuthContextValue>(
     () => ({
       status,
+      busy,
       user,
       token,
       error,
@@ -154,6 +168,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }),
     [
       status,
+      busy,
       user,
       token,
       error,

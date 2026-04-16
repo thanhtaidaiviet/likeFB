@@ -24,12 +24,24 @@ app.get('/api/health', (_req, res) => {
 
 const registerSchema = z.object({
   email: z.string().email(),
-  password: z.string().min(6).max(200),
+  password: z.string().min(7).max(200),
 })
+
+function inputErrorCode(err: z.ZodError) {
+  for (const issue of err.issues) {
+    const field = issue.path?.[0]
+    if (field === 'email') return 'EMAIL_INVALID'
+    if (field === 'password') {
+      if (issue.code === 'too_small') return 'WEAK_PASSWORD'
+      return 'INVALID_PASSWORD'
+    }
+  }
+  return 'INVALID_INPUT'
+}
 
 app.post('/api/auth/register', async (req, res) => {
   const parsed = registerSchema.safeParse(req.body)
-  if (!parsed.success) return res.status(400).json({ error: 'INVALID_INPUT' })
+  if (!parsed.success) return res.status(400).json({ error: inputErrorCode(parsed.error) })
 
   const { email, password } = parsed.data
   const passwordHash = await hashPassword(password)
@@ -42,7 +54,7 @@ app.post('/api/auth/register', async (req, res) => {
     )
     const row = result.rows[0] as { id: string; email: string }
     const token = signAccessToken({ sub: row.id, email: row.email })
-    return res.json({ token, user: { id: row.id, email: row.email } })
+    return res.status(201).json({ token, user: { id: row.id, email: row.email } })
   } catch (err: any) {
     if (err?.code === '23505') return res.status(409).json({ error: 'EMAIL_EXISTS' })
     console.error(err)
@@ -57,7 +69,7 @@ const loginSchema = z.object({
 
 app.post('/api/auth/login', async (req, res) => {
   const parsed = loginSchema.safeParse(req.body)
-  if (!parsed.success) return res.status(400).json({ error: 'INVALID_INPUT' })
+  if (!parsed.success) return res.status(400).json({ error: inputErrorCode(parsed.error) })
   const { email, password } = parsed.data
 
   const result = await pool.query('select id, email, password_hash from users where email = $1', [
@@ -66,11 +78,11 @@ app.post('/api/auth/login', async (req, res) => {
   const row = result.rows[0] as
     | { id: string; email: string; password_hash: string | null }
     | undefined
-  if (!row) return res.status(401).json({ error: 'INVALID_CREDENTIALS' })
-  if (!row.password_hash) return res.status(401).json({ error: 'INVALID_CREDENTIALS' })
+  if (!row) return res.status(404).json({ error: 'USER_NOT_FOUND' })
+  if (!row.password_hash) return res.status(409).json({ error: 'PASSWORD_NOT_SET' })
 
   const ok = await verifyPassword(password, row.password_hash)
-  if (!ok) return res.status(401).json({ error: 'INVALID_CREDENTIALS' })
+  if (!ok) return res.status(401).json({ error: 'INVALID_PASSWORD' })
 
   const token = signAccessToken({ sub: row.id, email: row.email })
   return res.json({ token, user: { id: row.id, email: row.email } })

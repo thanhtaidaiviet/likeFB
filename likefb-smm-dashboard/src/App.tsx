@@ -1,6 +1,7 @@
 import { AuthProvider, useAuth } from './auth/AuthContext'
 import Dashboard from './Dashboard'
 import LoginPage from './pages/LoginPage'
+import { ToastProvider } from './ui/toast'
 
 function AppGate() {
   const { status, loginOpen, closeLogin } = useAuth()
@@ -22,7 +23,7 @@ function AppGate() {
   return (
     <>
       <Dashboard />
-      {status === 'guest' && loginOpen ? (
+      {status !== 'authed' && loginOpen ? (
         <div className="fixed inset-0 z-50">
           <div
             className="absolute inset-0 bg-slate-900/40"
@@ -43,8 +44,10 @@ function AppGate() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <AppGate />
-    </AuthProvider>
+    <ToastProvider>
+      <AuthProvider>
+        <AppGate />
+      </AuthProvider>
+    </ToastProvider>
   )
 }

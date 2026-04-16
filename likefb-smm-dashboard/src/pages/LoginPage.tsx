@@ -3,10 +3,22 @@ import { useAuth } from '../auth/AuthContext'
 
 function friendlyError(code: string) {
   switch (code) {
+    case 'USER_NOT_FOUND':
+      return 'Tài khoản không tồn tại.'
+    case 'INVALID_PASSWORD':
+      return 'Mật khẩu không đúng.'
     case 'INVALID_CREDENTIALS':
       return 'Email hoặc mật khẩu không đúng.'
+    case 'PASSWORD_NOT_SET':
+      return 'Tài khoản này chưa đặt mật khẩu (đăng nhập Google).'
     case 'EMAIL_EXISTS':
       return 'Email đã tồn tại.'
+    case 'EMAIL_INVALID':
+      return 'Email không hợp lệ.'
+    case 'WEAK_PASSWORD':
+      return 'Mật khẩu quá yếu. Tối thiểu 7 ký tự.'
+    case 'PASSWORD_REQUIRED':
+      return 'Vui lòng nhập mật khẩu.'
     case 'INVALID_INPUT':
       return 'Dữ liệu không hợp lệ.'
     case 'SERVER_ERROR':
@@ -23,14 +35,16 @@ export default function LoginPage({
   variant?: 'page' | 'modal'
   onClose?: () => void
 }) {
-  const { status, error, login, register } = useAuth()
+  const { busy, error, login, register } = useAuth()
   const [mode, setMode] = useState<'login' | 'register'>('login')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [localError, setLocalError] = useState<string | null>(null)
   const [submitted, setSubmitted] = useState(false)
 
-  const disabled = status === 'loading'
+  const disabled = busy
 
   const errText = useMemo(() => {
     if (localError) return localError
@@ -47,7 +61,9 @@ export default function LoginPage({
     if (!trimmedEmail) return setLocalError('Vui lòng nhập email.')
     if (!trimmedEmail.includes('@')) return setLocalError('Email không hợp lệ.')
     if (!password) return setLocalError('Vui lòng nhập mật khẩu.')
-    if (password.length < 6) return setLocalError('Mật khẩu tối thiểu 6 ký tự.')
+    if (mode === 'register' && password.length < 7) return setLocalError('Mật khẩu tối thiểu 7 ký tự.')
+    if (mode === 'register' && password !== confirmPassword)
+      return setLocalError('Mật khẩu nhập lại không khớp.')
 
     if (mode === 'login') await login(trimmedEmail, password)
     else await register(trimmedEmail, password)
@@ -57,12 +73,8 @@ export default function LoginPage({
     <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <div className="text-xl font-semibold">
-            {mode === 'login' ? 'Đăng nhập' : 'Tạo tài khoản'}
-          </div>
-          <div className="mt-1 text-sm text-slate-600">
-            Đăng nhập thành công mới vào được hệ thống.
-          </div>
+          <div className="text-xl font-semibold">Tài khoản</div>
+          <div className="mt-1 text-sm text-slate-600">Đăng nhập hoặc tạo tài khoản để vào hệ thống.</div>
         </div>
         {variant === 'modal' && onClose ? (
           <button
@@ -74,6 +86,45 @@ export default function LoginPage({
             ×
           </button>
         ) : null}
+      </div>
+
+      <div className="mt-4 grid grid-cols-2 rounded-xl border border-slate-200 bg-slate-50 p-1 text-sm">
+        <button
+          type="button"
+          className={
+            mode === 'login'
+              ? 'h-10 rounded-lg bg-white font-semibold text-slate-900 shadow-sm'
+              : 'h-10 rounded-lg font-semibold text-slate-600 hover:text-slate-900'
+          }
+          onClick={() => {
+            setMode('login')
+            setLocalError(null)
+            setSubmitted(false)
+            setPassword('')
+            setConfirmPassword('')
+          }}
+          disabled={disabled}
+        >
+          Đăng nhập
+        </button>
+        <button
+          type="button"
+          className={
+            mode === 'register'
+              ? 'h-10 rounded-lg bg-white font-semibold text-slate-900 shadow-sm'
+              : 'h-10 rounded-lg font-semibold text-slate-600 hover:text-slate-900'
+          }
+          onClick={() => {
+            setMode('register')
+            setLocalError(null)
+            setSubmitted(false)
+            setPassword('')
+            setConfirmPassword('')
+          }}
+          disabled={disabled}
+        >
+          Đăng ký
+        </button>
       </div>
 
       {errText ? (
@@ -98,41 +149,59 @@ export default function LoginPage({
 
         <label className="grid gap-1">
           <div className="text-sm font-medium text-slate-700">Mật khẩu</div>
-          <input
-            className="h-11 rounded-xl border border-slate-200 px-3 outline-none focus:border-sky-400"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            type="password"
-            autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
-            placeholder="••••••••"
-            disabled={disabled}
-          />
+          <div className="relative">
+            <input
+              className="h-11 w-full rounded-xl border border-slate-200 px-3 pr-12 outline-none focus:border-sky-400"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              type={showPassword ? 'text' : 'password'}
+              autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+              placeholder="••••••••"
+              disabled={disabled}
+            />
+            <button
+              type="button"
+              className="absolute right-1 top-1 inline-flex h-9 items-center justify-center rounded-lg px-3 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+              onClick={() => setShowPassword((v) => !v)}
+              disabled={disabled}
+              aria-label={showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
+            >
+              {showPassword ? 'Ẩn' : 'Hiện'}
+            </button>
+          </div>
         </label>
+
+        {mode === 'register' ? (
+          <label className="grid gap-1">
+            <div className="text-sm font-medium text-slate-700">Nhập lại mật khẩu</div>
+            <input
+              className="h-11 rounded-xl border border-slate-200 px-3 outline-none focus:border-sky-400"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              type={showPassword ? 'text' : 'password'}
+              autoComplete="new-password"
+              placeholder="••••••••"
+              disabled={disabled}
+            />
+            <div className="text-xs text-slate-500">Mật khẩu tối thiểu 7 ký tự.</div>
+          </label>
+        ) : null}
 
         <button
           className="mt-2 inline-flex h-11 items-center justify-center rounded-xl bg-sky-600 px-4 text-sm font-semibold text-white hover:bg-sky-700 disabled:opacity-60"
           type="submit"
           disabled={disabled}
         >
-          {mode === 'login' ? 'Đăng nhập' : 'Tạo tài khoản'}
+          {disabled ? 'Đang xử lý…' : mode === 'login' ? 'Đăng nhập' : 'Tạo tài khoản'}
         </button>
       </form>
 
       <GoogleLoginSection disabled={disabled} />
 
-      <div className="mt-4 flex items-center justify-between text-sm">
-        <button
-          className="font-semibold text-slate-700 hover:text-slate-900"
-          type="button"
-          onClick={() => {
-            setMode((m) => (m === 'login' ? 'register' : 'login'))
-            setLocalError(null)
-            setSubmitted(false)
-          }}
-          disabled={disabled}
-        >
-          {mode === 'login' ? 'Chưa có tài khoản? Đăng ký' : 'Đã có tài khoản? Đăng nhập'}
-        </button>
+      <div className="mt-4 text-xs text-slate-500">
+        {mode === 'login'
+          ? 'Nếu bạn đã tạo bằng Google, hãy dùng nút Google để đăng nhập.'
+          : 'Tạo tài khoản bằng email + mật khẩu, hoặc dùng Google để tạo nhanh.'}
       </div>
     </div>
   )
@@ -192,8 +261,8 @@ function GoogleLoginSection({ disabled }: { disabled: boolean }) {
 
       {!hasClientId ? (
         <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-          Chưa cấu hình Google Client ID. Thêm <span className="font-mono">VITE_GOOGLE_CLIENT_ID</span>{' '}
-          vào env của frontend.
+          Chưa cấu hình Google Client ID. Thêm <span className="font-mono">GOOGLE_CLIENT_ID</span>{' '}
+          vào env (frontend sẽ tự đọc qua Vite).
         </div>
       ) : null}
 
