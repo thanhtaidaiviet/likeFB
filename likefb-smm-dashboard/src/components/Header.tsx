@@ -28,10 +28,6 @@ export default function Header({
           <div className="truncate text-sm font-semibold text-slate-900">
             Dashboard đặt dịch vụ SMM
           </div>
-          <div className="mt-0.5 truncate text-xs text-slate-500">
-            Nền tảng đang chọn:{' '}
-            <span className="font-semibold text-slate-700">{activePlatform}</span>
-          </div>
         </div>
 
         <div className="flex items-center gap-3">
