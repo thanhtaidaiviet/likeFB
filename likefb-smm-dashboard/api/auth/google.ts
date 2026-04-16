@@ -66,7 +66,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!row) return sendJson(res, 500, { error: 'SERVER_ERROR' })
 
     const token = signAccessToken({ sub: row.id, email: row.email })
-    return sendJson(res, 200, { token, user: { id: row.id, email: row.email } })
+    const balRes = await getPool().query('select balance_vnd from users where id = $1', [row.id])
+    const balRow = balRes.rows[0] as { balance_vnd: string | number } | undefined
+    return sendJson(res, 200, {
+      token,
+      user: { id: row.id, email: row.email, balanceVnd: Number(balRow?.balance_vnd ?? 0) },
+    })
   } catch (err: any) {
     const hint = describeDbError(err)
     console.error(err)

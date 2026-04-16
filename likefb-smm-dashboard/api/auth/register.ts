@@ -36,12 +36,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const id = crypto.randomUUID()
     const result = await getPool().query(
-      'insert into users (id, email, password_hash) values ($1, $2, $3) returning id, email, created_at',
+      'insert into users (id, email, password_hash) values ($1, $2, $3) returning id, email, balance_vnd, created_at',
       [id, email.toLowerCase(), passwordHash],
     )
-    const row = result.rows[0] as { id: string; email: string }
+    const row = result.rows[0] as { id: string; email: string; balance_vnd: string | number }
     const token = signAccessToken({ sub: row.id, email: row.email })
-    return sendJson(res, 201, { token, user: { id: row.id, email: row.email } })
+    return sendJson(res, 201, {
+      token,
+      user: { id: row.id, email: row.email, balanceVnd: Number(row.balance_vnd) },
+    })
   } catch (err: any) {
     if (err?.code === '23505') return sendJson(res, 409, { error: 'EMAIL_EXISTS' })
     const hint = describeDbError(err)
