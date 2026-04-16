@@ -3,18 +3,22 @@ import type { NavItem } from './Sidebar'
 
 export default function Header({
   userName,
-  userRole,
+  isAuthed,
   activePlatform,
   mobileMenuItems,
   onMobileNavChange,
   onTopupClick,
+  onLoginClick,
+  onLogoutClick,
 }: {
   userName: string
-  userRole: string
+  isAuthed: boolean
   activePlatform: string
   mobileMenuItems: NavItem[]
   onMobileNavChange: (value: string) => void
   onTopupClick(): void
+  onLoginClick(): void
+  onLogoutClick(): void
 }) {
   const initials = useMemo(() => {
     const parts = userName.trim().split(/\s+/)
@@ -41,38 +45,47 @@ export default function Header({
             Nạp tiền
           </button>
 
-          <div className="lg:hidden">
-            <label className="sr-only" htmlFor="platform">
-              Nền tảng
-            </label>
-            <select
-              id="platform"
-              value={activePlatform}
-              onChange={(e) => onMobileNavChange(e.target.value)}
-              className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            >
-              {mobileMenuItems.map((it) => (
-                <option key={it.value} value={it.value}>
-                  {it.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
           <div className="hidden items-center gap-3 sm:flex">
-            <div className="text-right">
-              <div className="text-sm font-semibold text-slate-900">{userName}</div>
-              <div className="text-xs text-slate-500">{userRole}</div>
-            </div>
             <div className="grid size-10 place-items-center rounded-full bg-indigo-600 text-sm font-extrabold text-white">
               {initials}
             </div>
+            {isAuthed ? (
+              <button
+                type="button"
+                onClick={onLogoutClick}
+                className="inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50"
+              >
+                Đăng xuất
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={onLoginClick}
+                className="inline-flex items-center justify-center rounded-lg bg-sky-600 px-3 py-2 text-sm font-semibold text-white hover:bg-sky-700"
+              >
+                Đăng nhập
+              </button>
+            )}
           </div>
 
           <div className="sm:hidden">
-            <div className="grid size-10 place-items-center rounded-full bg-indigo-600 text-sm font-extrabold text-white">
-              {initials}
-            </div>
+            {isAuthed ? (
+              <button
+                type="button"
+                onClick={onLogoutClick}
+                className="inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50"
+              >
+                Đăng xuất
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={onLoginClick}
+                className="inline-flex items-center justify-center rounded-lg bg-sky-600 px-3 py-2 text-sm font-semibold text-white hover:bg-sky-700"
+              >
+                Đăng nhập
+              </button>
+            )}
           </div>
         </div>
       </div>

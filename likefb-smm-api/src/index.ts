@@ -4,7 +4,7 @@ import cors from 'cors'
 import { z } from 'zod'
 import crypto from 'node:crypto'
 import { OAuth2Client } from 'google-auth-library'
-import { pool } from './db/pool.js'
+import { getPool } from './db/pool.js'
 import { hashPassword, verifyPassword } from './auth/password.js'
 import { signAccessToken, verifyAccessToken } from './auth/jwt.js'
 
@@ -182,7 +182,7 @@ app.post('/api/smm/add', async (req, res) => {
 app.get('/api/account/balance', async (req, res) => {
   try {
     const jwt = requireUser(req)
-    const r = await pool.query('select balance_vnd from users where id = $1', [jwt.sub])
+    const r = await getPool().query('select balance_vnd from users where id = $1', [jwt.sub])
     const row = r.rows[0] as { balance_vnd: string | number } | undefined
     if (!row) return res.status(404).json({ error: 'USER_NOT_FOUND' })
     return res.json({ balanceVnd: Number(row.balance_vnd) })
@@ -202,7 +202,7 @@ app.post('/api/account/topup', async (req, res) => {
     const parsed = topupSchema.safeParse(req.body)
     if (!parsed.success) return res.status(400).json({ error: 'INVALID_INPUT' })
     const { amountVnd } = parsed.data
-    const r = await pool.query(
+    const r = await getPool().query(
       'update users set balance_vnd = balance_vnd + $1 where id = $2 returning balance_vnd',
       [amountVnd, jwt.sub],
     )
@@ -270,7 +270,7 @@ const placeSchema = z
   .strict()
 
 app.post('/api/orders/place', async (req, res) => {
-  const client = await pool.connect()
+  const client = await getPool().connect()
   try {
     const jwt = requireUser(req)
     const parsed = placeSchema.safeParse(req.body)
@@ -382,7 +382,7 @@ app.post('/api/auth/register', async (req, res) => {
 
   try {
     const id = crypto.randomUUID()
-    const result = await pool.query(
+    const result = await getPool().query(
       'insert into users (id, email, password_hash) values ($1, $2, $3) returning id, email, created_at, balance_vnd',
       [id, email.toLowerCase(), passwordHash],
     )
@@ -408,9 +408,10 @@ app.post('/api/auth/login', async (req, res) => {
   if (!parsed.success) return res.status(400).json({ error: inputErrorCode(parsed.error) })
   const { email, password } = parsed.data
 
-  const result = await pool.query('select id, email, password_hash, balance_vnd from users where email = $1', [
-    email.toLowerCase(),
-  ])
+  const result = await getPool().query(
+    'select id, email, password_hash, balance_vnd from users where email = $1',
+    [email.toLowerCase()],
+  )
   const row = result.rows[0] as
     | { id: string; email: string; password_hash: string | null; balance_vnd: string | number }
     | undefined
@@ -450,7 +451,7 @@ app.post('/api/auth/google', async (req, res) => {
     // Upsert: prefer google_sub; if email already exists, attach google_sub.
     const lowerEmail = String(email).toLowerCase()
     const newId = crypto.randomUUID()
-    const dbRes = await pool.query(
+    const dbRes = await getPool().query(
       `
       with existing as (
         select id, email, google_sub
@@ -482,7 +483,7 @@ app.post('/api/auth/google', async (req, res) => {
     if (!row) return res.status(500).json({ error: 'SERVER_ERROR' })
 
     const token = signAccessToken({ sub: row.id, email: row.email })
-    const balRes = await pool.query('select balance_vnd from users where id = $1', [row.id])
+    const balRes = await getPool().query('select balance_vnd from users where id = $1', [row.id])
     const balRow = balRes.rows[0] as { balance_vnd: string | number } | undefined
     return res.json({
       token,
@@ -497,7 +498,7 @@ app.post('/api/auth/google', async (req, res) => {
 app.get('/api/auth/me', async (req, res) => {
   try {
     const user = requireUser(req)
-    const dbRes = await pool.query('select id, email, balance_vnd from users where id = $1', [user.sub])
+    const dbRes = await getPool().query('select id, email, balance_vnd from users where id = $1', [user.sub])
     const row = dbRes.rows[0] as { id: string; email: string; balance_vnd: string | number } | undefined
     if (!row) return res.status(401).json({ error: 'UNAUTHORIZED' })
     return res.json({ user: { id: row.id, email: row.email, balanceVnd: Number(row.balance_vnd) } })

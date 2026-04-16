@@ -5,7 +5,7 @@ import Sidebar, { type NavItem } from './components/Sidebar'
 import TopupModal from './components/TopupModal'
 import UserPanel from './components/UserPanel'
 import { useAuth } from './auth/AuthContext'
-import { apiOrdersPlace, apiSmmServicesPublic } from './api/smm'
+import { apiOrdersPlace, apiSmmAdd, apiSmmServicesPublic } from './api/smm'
 import { SERVICE_OVERRIDES } from './servicesOverrides'
 
 import type { Category, Platform, SmmService } from './types'
@@ -115,6 +115,12 @@ function formatVnd(n: number) {
   return n.toLocaleString('vi-VN') + ' ₫'
 }
 
+const FREE_LIKE_SERVICES: Record<string, string> = {
+  Facebook: '4042',
+  TikTok: '4876',
+  Instagram: '4874',
+}
+
 export default function Dashboard() {
   const { status, user, token, logout, openLogin } = useAuth()
   const [activeNav, setActiveNav] = useState<Platform>('')
@@ -123,6 +129,11 @@ export default function Dashboard() {
   const [servicesError, setServicesError] = useState<string | null>(null)
   const [servicesLoading, setServicesLoading] = useState(false)
   const [topupOpen, setTopupOpen] = useState(false)
+  const [freeLikeOpen, setFreeLikeOpen] = useState(false)
+  const [freePlatform, setFreePlatform] = useState<Platform>('')
+  const [freeServiceId, setFreeServiceId] = useState<string>('4042')
+  const [freeQty, setFreeQty] = useState<number>(10)
+  const [freeLink, setFreeLink] = useState<string>('')
 
   const [draft, setDraft] = useState<OrderDraft>({
     search: '',
@@ -193,6 +204,16 @@ export default function Dashboard() {
     if (!services.length) return
     const firstPlatform = services[0].platform
     setActiveNav((cur) => (cur ? cur : firstPlatform))
+    setFreePlatform((cur) => {
+      if (cur) return cur
+      const allowed = ['Facebook', 'TikTok', 'Instagram'] as Platform[]
+      const firstByServiceId =
+        allowed.find((p) => {
+          const id = FREE_LIKE_SERVICES[String(p)]
+          return id ? services.some((s) => s.id === id) : false
+        }) ?? null
+      return firstByServiceId ?? firstPlatform
+    })
     setDraft((d) =>
       d.platform
         ? d
@@ -268,6 +289,51 @@ export default function Dashboard() {
     }
     return list
   }, [services])
+
+  const freePlatforms = useMemo<Platform[]>(() => {
+    const allowed = ['Facebook', 'TikTok', 'Instagram'] as Platform[]
+    return allowed.filter((p) => {
+      const id = FREE_LIKE_SERVICES[String(p)]
+      if (!id) return false
+      return services.some((s) => s.id === id)
+    })
+  }, [services])
+
+  const freePlatformOptions = useMemo(() => {
+    return freePlatforms.map((p) => {
+      const id = FREE_LIKE_SERVICES[String(p)]
+      const svc = id ? services.find((s) => s.id === id) ?? null : null
+      const label = p
+      return { platform: p, serviceId: id || '', label, service: svc }
+    })
+  }, [freePlatforms, services])
+
+  useEffect(() => {
+    if (!services.length) return
+    if (!freePlatforms.length) return
+    // Ensure selected platform is one of the allowed free-like platforms.
+    if (freePlatform && freePlatforms.includes(freePlatform)) return
+    setFreePlatform(freePlatforms[0])
+  }, [freePlatform, freePlatforms, services.length])
+
+  const freeServiceForPlatform = useMemo(() => {
+    const serviceId = FREE_LIKE_SERVICES[String(freePlatform)] || ''
+    if (!serviceId) return null
+    return services.find((s) => s.id === serviceId) ?? null
+  }, [freePlatform, services])
+
+  useEffect(() => {
+    if (!services.length) return
+    if (!freePlatform) return
+    const mapped = FREE_LIKE_SERVICES[String(freePlatform)]
+    if (!mapped) return
+    setFreeServiceId(mapped)
+  }, [freePlatform, services.length])
+
+  useEffect(() => {
+    if (!freeServiceForPlatform) return
+    setFreeQty(freeServiceForPlatform.min)
+  }, [freeServiceForPlatform])
 
   const navItems = useMemo<NavItem[]>(
     () => availablePlatforms.map((p) => ({ label: p, value: p })),
@@ -351,6 +417,41 @@ export default function Dashboard() {
     }
   }
 
+  async function handleFreeLikeSubmit() {
+    if (!token) return openLogin()
+    if (!freePlatform) {
+      // eslint-disable-next-line no-alert
+      alert('Vui lòng chọn nền tảng.')
+      return
+    }
+    if (!freeServiceId || !freeServiceForPlatform) {
+      // eslint-disable-next-line no-alert
+      alert('Không tìm thấy dịch vụ theo nền tảng. Vui lòng thử lại sau.')
+      return
+    }
+    const link = freeLink.trim()
+    if (!link) {
+      // eslint-disable-next-line no-alert
+      alert('Vui lòng nhập link cần tăng.')
+      return
+    }
+    const qty = Number.isFinite(freeQty) ? freeQty : freeServiceForPlatform.min
+    try {
+      const res = await apiSmmAdd(token, { service: freeServiceId, link, quantity: qty })
+      setFreeLink('')
+      setFreeLikeOpen(false)
+      // eslint-disable-next-line no-alert
+      alert(
+        `Tăng like: gửi thành công!\n\nService: ${freeServiceId}\nLink: ${link}\nKết quả: ${JSON.stringify(
+          res,
+        )}`,
+      )
+    } catch (e: any) {
+      // eslint-disable-next-line no-alert
+      alert(`Tăng like thất bại: ${e?.message || 'SMM_ADD_FAILED'}`)
+    }
+  }
+
   return (
     <div className="min-h-full bg-slate-50 text-slate-900">
       <div className="grid min-h-screen grid-cols-1 lg:grid-cols-[260px_1fr_340px]">
@@ -365,41 +466,17 @@ export default function Dashboard() {
         <div className="min-w-0">
           <Header
             userName={user?.email ?? 'user'}
-            userRole="Agent / Reseller"
+            isAuthed={status === 'authed'}
             activePlatform={activeNav}
             mobileMenuItems={navItems}
             onMobileNavChange={(v) => handleNavChange(v as Platform)}
             onTopupClick={() => setTopupOpen(true)}
+            onLoginClick={openLogin}
+            onLogoutClick={logout}
           />
 
           <main className="px-4 py-6 sm:px-6">
             <div className="grid gap-4">
-              <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-white p-4">
-                <div className="min-w-0">
-                  <div className="text-sm font-semibold text-slate-900">Đang đăng nhập</div>
-                  <div className="mt-1 truncate text-sm text-slate-600">
-                    {status === 'authed' ? user?.email ?? '—' : 'Khách (chưa đăng nhập)'}
-                  </div>
-                </div>
-                {status === 'authed' ? (
-                  <button
-                    type="button"
-                    onClick={logout}
-                    className="inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50"
-                  >
-                    Đăng xuất
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={openLogin}
-                    className="inline-flex items-center justify-center rounded-lg bg-sky-600 px-3 py-2 text-sm font-semibold text-white hover:bg-sky-700"
-                  >
-                    Đăng nhập
-                  </button>
-                )}
-              </div>
-
               <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-rose-900">
                 <div className="flex items-start gap-3">
                   <div className="mt-0.5 grid size-9 place-items-center rounded-lg bg-rose-600 text-white">
@@ -415,26 +492,19 @@ export default function Dashboard() {
                 </div>
               </div>
 
-              <div className="rounded-xl border border-slate-200 bg-white p-4">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <div className="text-sm font-semibold text-slate-900">
-                      Kênh hỗ trợ Telegram
-                    </div>
-                    <div className="text-sm text-slate-600">
-                      Nhắn admin để được hỗ trợ nhanh nhất.
-                    </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setFreeLikeOpen(true)
+                }}
+                className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-left text-emerald-950 transition hover:bg-emerald-100/60"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="font-semibold">Tăng like miễn phí</div>
                   </div>
-                  <a
-                    className="inline-flex items-center justify-center rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-700"
-                    href="https://t.me/"
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    Mở Telegram
-                  </a>
                 </div>
-              </div>
+              </button>
 
               <div className="rounded-xl border border-slate-200 bg-white">
                 <div className="border-b border-slate-200 px-4 py-3 sm:px-6">
@@ -493,6 +563,177 @@ export default function Dashboard() {
         userId={status === 'authed' ? user?.id : undefined}
         userEmail={status === 'authed' ? user?.email : undefined}
       />
+
+      <div className="fixed bottom-6 right-6 z-[54] flex flex-col gap-3">
+        <a
+          href={
+            (import.meta.env.VITE_TELEGRAM_SUPPORT_USERNAME as string | undefined)
+              ? `https://t.me/${import.meta.env.VITE_TELEGRAM_SUPPORT_USERNAME as string}`
+              : 'https://t.me/'
+          }
+          target="_blank"
+          rel="noreferrer"
+          className="group inline-flex size-12 items-center justify-center rounded-full bg-sky-600 text-white shadow-lg ring-1 ring-black/5 transition hover:bg-sky-700"
+          aria-label="Hỗ trợ Telegram"
+          title="Telegram"
+        >
+          <svg
+            viewBox="0 0 24 24"
+            className="size-6"
+            fill="currentColor"
+            aria-hidden="true"
+          >
+            <path d="M21.8 3.6c-.3-.3-.7-.4-1.2-.2L2.9 10.2c-.5.2-.8.6-.8 1.1 0 .5.3.9.8 1.1l4.6 1.6 1.7 5.3c.1.4.5.7.9.8.4.1.9 0 1.2-.3l2.6-2.5 4.9 3.6c.3.2.7.3 1.1.2.4-.1.7-.4.8-.8l3.4-16.1c.1-.4 0-.8-.3-1.1zM9.8 18.2l-1.2-3.8 8.9-8.2-10.9 7.2-3.8-1.3 14.7-5.7-2.9 13.8-4.7-3.4c-.4-.3-1-.3-1.3.1l-1.8 1.3z" />
+          </svg>
+        </a>
+
+        <a
+          href={(import.meta.env.VITE_ZALO_SUPPORT_URL as string | undefined) || 'https://zalo.me/'}
+          target="_blank"
+          rel="noreferrer"
+          className="group inline-flex size-12 items-center justify-center rounded-full bg-blue-600 text-white shadow-lg ring-1 ring-black/5 transition hover:bg-blue-700"
+          aria-label="Hỗ trợ Zalo"
+          title="Zalo"
+        >
+          <span className="text-sm font-extrabold">Z</span>
+        </a>
+      </div>
+
+      {freeLikeOpen ? (
+        <div className="fixed inset-0 z-[45]">
+          <div
+            className="absolute inset-0 bg-slate-900/40"
+            onClick={() => setFreeLikeOpen(false)}
+            role="button"
+            tabIndex={0}
+            aria-label="Đóng"
+          />
+          <div className="absolute inset-0 flex items-center justify-center p-4">
+            <div className="w-full max-w-2xl rounded-2xl border border-slate-200 bg-white shadow-xl">
+              <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-5 py-4">
+                <div className="min-w-0">
+                  <div className="truncate text-base font-semibold text-slate-900">
+                    Tăng like
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setFreeLikeOpen(false)}
+                  className="inline-flex size-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-800 hover:bg-slate-50"
+                  aria-label="Đóng"
+                >
+                  ×
+                </button>
+              </div>
+
+              <div className="grid gap-4 p-5 md:grid-cols-2">
+                <div>
+                  <div className="text-xs font-semibold uppercase tracking-wide text-slate-600">
+                    Nền tảng
+                  </div>
+                  <select
+                    value={freePlatform}
+                    onChange={(e) => setFreePlatform(e.target.value as Platform)}
+                    className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm shadow-sm outline-none focus:ring-2 focus:ring-emerald-500"
+                  >
+                    {servicesLoading ? (
+                      <option value="" disabled>
+                        Đang tải...
+                      </option>
+                    ) : freePlatformOptions.length ? (
+                      freePlatformOptions.map((opt) => (
+                        <option key={opt.platform} value={opt.platform}>
+                          {opt.label}
+                        </option>
+                      ))
+                    ) : (
+                      <option value="" disabled>
+                        Không có nền tảng miễn phí
+                      </option>
+                    )}
+                  </select>
+                </div>
+
+                <div>
+                  <div className="text-xs font-semibold uppercase tracking-wide text-slate-600">
+                    Dịch vụ
+                  </div>
+                  <input
+                    value={
+                      servicesLoading
+                        ? 'Đang tải dịch vụ...'
+                        : freeServiceForPlatform
+                          ? `${freeServiceForPlatform.id} - ${freeServiceForPlatform.name}`
+                          : freeServiceId
+                            ? `Không tìm thấy service ${freeServiceId} từ API`
+                            : '—'
+                    }
+                    disabled
+                    className="mt-1 h-10 w-full cursor-not-allowed rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 shadow-sm outline-none"
+                  />
+                  {freeServiceForPlatform ? (
+                    <div className="mt-1 text-xs text-slate-500">
+                      SL mặc định (min):{' '}
+                      <span className="font-semibold">
+                        {freeServiceForPlatform.min.toLocaleString('vi-VN')}
+                      </span>
+                    </div>
+                  ) : null}
+                </div>
+
+                <div className="md:col-span-2">
+                  <div className="text-xs font-semibold uppercase tracking-wide text-slate-600">
+                    Link cần tăng
+                  </div>
+                  <input
+                    value={freeLink}
+                    onChange={(e) => setFreeLink(e.target.value)}
+                    placeholder="https://..."
+                    disabled={!freePlatform || !freeServiceForPlatform}
+                    className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm shadow-sm outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                  {!freePlatform || !freeServiceForPlatform ? (
+                    <div className="mt-1 text-xs text-slate-500">
+                      Vui lòng chọn nền tảng (và dịch vụ hợp lệ) trước khi nhập link.
+                    </div>
+                  ) : null}
+                </div>
+
+                <div className="md:col-span-2">
+                  <div className="text-xs font-semibold uppercase tracking-wide text-slate-600">
+                    Số lượng
+                  </div>
+                  <input
+                    value={freeQty}
+                    disabled
+                    className="mt-1 h-10 w-full cursor-not-allowed rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 shadow-sm outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-2 border-t border-slate-200 px-5 py-4 sm:flex-row sm:justify-end">
+                <button
+                  type="button"
+                  onClick={() => setFreeLikeOpen(false)}
+                  className="inline-flex h-10 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-800 hover:bg-slate-50"
+                >
+                  Đóng
+                </button>
+                <button
+                  type="button"
+                  onClick={handleFreeLikeSubmit}
+                  className={[
+                    'inline-flex h-10 items-center justify-center rounded-lg px-4 text-sm font-semibold shadow-sm transition',
+                    'bg-emerald-600 text-white hover:bg-emerald-700',
+                  ].join(' ')}
+                >
+                  Tăng like
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }

@@ -1,5 +1,5 @@
 import 'dotenv/config'
-import { pool } from './pool.js'
+import { getPool } from './pool.js'
 
 const SQL = `
 create table if not exists users (
@@ -62,6 +62,7 @@ create index if not exists orders_user_id_created_at_idx on orders(user_id, crea
 `
 
 async function main() {
+  const pool = getPool()
   await pool.query(SQL)
   await pool.end()
   console.log('migrate: OK')
@@ -69,7 +70,12 @@ async function main() {
 
 main().catch(async (err) => {
   console.error('migrate: FAILED', err)
-  await pool.end().catch(() => {})
+  try {
+    const pool = getPool()
+    await pool.end().catch(() => {})
+  } catch {
+    // ignore
+  }
   process.exit(1)
 })
 
