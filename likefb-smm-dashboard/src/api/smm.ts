@@ -48,12 +48,28 @@ async function requestJsonPublic<T>(path: string, init?: RequestInit): Promise<T
       ...(init?.headers ?? {}),
     },
   })
-  const data = await res.json().catch(() => null)
-  if (!res.ok) {
-    const code = (data && (data.error as string)) || 'REQUEST_FAILED'
-    const detail = data && typeof data.detail === 'string' ? data.detail : null
-    throw new Error(detail ? `${code}: ${detail}` : code)
+  const text = await res.text().catch(() => '')
+
+  let data: any = null
+  try {
+    data = text ? JSON.parse(text) : null
+  } catch {
+    data = null
   }
+
+  if (!res.ok) {
+    const bodyErr = data && typeof data.error === 'string' ? data.error : null
+    const bodyDetail = data && typeof data.detail === 'string' ? data.detail : null
+
+    if (!bodyErr && !bodyDetail) {
+      const snippet = text ? text.slice(0, 200) : null
+      throw new Error(snippet ? `REQUEST_FAILED: ${snippet}` : `REQUEST_FAILED_HTTP_${res.status}`)
+    }
+
+    const code = bodyErr || 'REQUEST_FAILED'
+    throw new Error(bodyDetail ? `${code}: ${bodyDetail}` : code)
+  }
+
   return data as T
 }
 
