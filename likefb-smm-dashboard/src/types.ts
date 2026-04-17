@@ -8,6 +8,7 @@ export type SmmService = {
   platform: Platform
   category: Category
   name: string
+  type?: string
   panelRateVndPer1k?: number
   markupMultiplier?: number
   rateVndPer1k: number

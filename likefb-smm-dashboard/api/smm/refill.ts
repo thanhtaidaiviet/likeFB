@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { z } from 'zod'
-import { onlyMethods, sendJson } from '../_lib/http.js'
+import { onlyMethods, readJsonBody, sendJson } from '../_lib/http.js'
 import { requireUser } from '../_lib/auth.js'
 import { smmApiKey, smmRequest } from '../_lib/smm.js'
 
@@ -22,7 +22,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     requireUser(req)
 
-    const parsed = refillSchema.safeParse(req.body)
+    let body: unknown
+    try {
+      body = await readJsonBody(req)
+    } catch {
+      return sendJson(res, 400, { error: 'INVALID_INPUT' })
+    }
+
+    const parsed = refillSchema.safeParse(body)
     if (!parsed.success) return sendJson(res, 400, { error: 'INVALID_INPUT' })
     if (!parsed.data.order && !parsed.data.orders) return sendJson(res, 400, { error: 'INVALID_INPUT' })
 

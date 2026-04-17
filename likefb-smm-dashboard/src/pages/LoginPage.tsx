@@ -59,7 +59,11 @@ export default function LoginPage({
 
     const trimmedEmail = email.trim()
     if (!trimmedEmail) return setLocalError('Vui lòng nhập email.')
-    if (!trimmedEmail.includes('@')) return setLocalError('Email không hợp lệ.')
+    const isAdminAlias = trimmedEmail.toLowerCase() === 'admin'
+    if (mode === 'login' && !isAdminAlias && !trimmedEmail.includes('@')) {
+      return setLocalError('Email không hợp lệ.')
+    }
+    if (mode === 'register' && !trimmedEmail.includes('@')) return setLocalError('Email không hợp lệ.')
     if (!password) return setLocalError('Vui lòng nhập mật khẩu.')
     if (mode === 'register' && password.length < 7) return setLocalError('Mật khẩu tối thiểu 7 ký tự.')
     if (mode === 'register' && password !== confirmPassword)
@@ -140,9 +144,9 @@ export default function LoginPage({
             className="h-11 rounded-xl border border-slate-200 px-3 outline-none focus:border-sky-400"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            type="email"
-            autoComplete="email"
-            placeholder="you@example.com"
+            type="text"
+            autoComplete="username"
+            placeholder="you@example.com (hoặc admin)"
             disabled={disabled}
           />
         </label>
@@ -226,25 +230,60 @@ function GoogleLoginSection({ disabled }: { disabled: boolean }) {
 
   useEffect(() => {
     const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined
-    const google = window.google
-    if (!clientId || !google?.accounts?.id || !buttonRef.current) return
+    if (!clientId || !buttonRef.current) return
 
-    google.accounts.id.initialize({
-      client_id: clientId,
-      callback: async (resp: { credential?: string }) => {
-        const idToken = resp?.credential
-        if (!idToken) return
-        await loginWithGoogle(idToken)
-      },
-    })
+    let cancelled = false
 
-    buttonRef.current.innerHTML = ''
-    google.accounts.id.renderButton(buttonRef.current, {
-      theme: 'outline',
-      size: 'large',
-      text: 'signin_with',
-      width: 380,
-    })
+    async function ensureGoogleGsiLoaded() {
+      if (window.google?.accounts?.id) return
+      const existing = document.querySelector<HTMLScriptElement>('script[data-likefb="google-gsi"]')
+      if (existing) {
+        await new Promise<void>((resolve, reject) => {
+          existing.addEventListener('load', () => resolve(), { once: true })
+          existing.addEventListener('error', () => reject(new Error('GOOGLE_GSI_LOAD_FAILED')), { once: true })
+        })
+        return
+      }
+      await new Promise<void>((resolve, reject) => {
+        const s = document.createElement('script')
+        s.src = 'https://accounts.google.com/gsi/client'
+        s.async = true
+        s.defer = true
+        s.dataset.likefb = 'google-gsi'
+        s.onload = () => resolve()
+        s.onerror = () => reject(new Error('GOOGLE_GSI_LOAD_FAILED'))
+        document.head.appendChild(s)
+      })
+    }
+
+    async function init() {
+      await ensureGoogleGsiLoaded()
+      if (cancelled) return
+      const google = window.google
+      if (!google?.accounts?.id || !buttonRef.current) return
+
+      google.accounts.id.initialize({
+        client_id: clientId,
+        callback: async (resp: { credential?: string }) => {
+          const idToken = resp?.credential
+          if (!idToken) return
+          await loginWithGoogle(idToken)
+        },
+      })
+
+      buttonRef.current.innerHTML = ''
+      google.accounts.id.renderButton(buttonRef.current, {
+        theme: 'outline',
+        size: 'large',
+        text: 'signin_with',
+        width: 380,
+      })
+    }
+
+    void init()
+    return () => {
+      cancelled = true
+    }
   }, [loginWithGoogle])
 
   const hasClientId = Boolean(import.meta.env.VITE_GOOGLE_CLIENT_ID)

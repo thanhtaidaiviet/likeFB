@@ -4,7 +4,7 @@ import { OAuth2Client } from 'google-auth-library'
 import crypto from 'node:crypto'
 import { getPool } from '../_lib/pool.js'
 import { signAccessToken } from '../_lib/jwt.js'
-import { onlyMethods, sendJson } from '../_lib/http.js'
+import { onlyMethods, readJsonBody, sendJson } from '../_lib/http.js'
 import { describeDbError } from '../_lib/db-error.js'
 
 const googleLoginSchema = z.object({
@@ -16,7 +16,14 @@ const googleClient = new OAuth2Client()
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!onlyMethods(req, res, ['POST'])) return
 
-  const parsed = googleLoginSchema.safeParse(req.body)
+  let body: unknown
+  try {
+    body = await readJsonBody(req)
+  } catch {
+    return sendJson(res, 400, { error: 'INVALID_INPUT' })
+  }
+
+  const parsed = googleLoginSchema.safeParse(body)
   if (!parsed.success) return sendJson(res, 400, { error: 'INVALID_INPUT' })
 
   const clientId = process.env.GOOGLE_CLIENT_ID

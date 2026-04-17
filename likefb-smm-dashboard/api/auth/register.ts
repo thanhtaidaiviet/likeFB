@@ -4,7 +4,7 @@ import crypto from 'node:crypto'
 import { getPool } from '../_lib/pool.js'
 import { hashPassword } from '../_lib/password.js'
 import { signAccessToken } from '../_lib/jwt.js'
-import { onlyMethods, sendJson } from '../_lib/http.js'
+import { onlyMethods, readJsonBody, sendJson } from '../_lib/http.js'
 import { describeDbError } from '../_lib/db-error.js'
 
 const registerSchema = z.object({
@@ -28,7 +28,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!onlyMethods(req, res, ['POST'])) return
 
   try {
-    const parsed = registerSchema.safeParse(req.body)
+    let body: unknown
+    try {
+      body = await readJsonBody(req)
+    } catch {
+      return sendJson(res, 400, { error: 'INVALID_INPUT' })
+    }
+
+    const parsed = registerSchema.safeParse(body)
     if (!parsed.success) return sendJson(res, 400, { error: inputErrorCode(parsed.error) })
 
     const { email, password } = parsed.data

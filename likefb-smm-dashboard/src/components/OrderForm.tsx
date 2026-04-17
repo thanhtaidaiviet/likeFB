@@ -8,7 +8,8 @@ export type OrderDraft = {
   category: Category
   serviceId: string
   targetLink: string
-  quantity: string
+  quantity: number
+  comments: string
 }
 
 function fieldLabel(s: string) {
@@ -41,6 +42,7 @@ export default function OrderForm({
   onSubmit,
   onRequireAuth,
   isGuest,
+  submitting,
 }: {
   draft: OrderDraft
   onDraftChange: Dispatch<SetStateAction<OrderDraft>>
@@ -54,26 +56,22 @@ export default function OrderForm({
   onSubmit: () => void
   onRequireAuth: () => void
   isGuest: boolean
+  submitting?: boolean
 }) {
   const { toast } = useToast()
 
   const minQty = selectedService?.min ?? 0
   const maxQty = selectedService?.max ?? Number.MAX_SAFE_INTEGER
+  const needsComments =
+    selectedService?.type != null && String(selectedService.type).toLowerCase() === 'custom comments'
 
-  function parseQty(text: string) {
-    const raw = String(text ?? '')
-    const digits = raw.replace(/[^\d]/g, '')
-    if (!digits) return NaN
-    const n = Number(digits)
-    return Number.isFinite(n) ? n : NaN
-  }
-
-  function clampQty(n: number) {
-    if (!Number.isFinite(n)) return minQty
-    const up = Math.max(minQty, n)
-    const down = Math.min(maxQty, up)
-    return Number.isFinite(down) ? down : minQty
-  }
+  const commentLineCount = (() => {
+    if (!needsComments) return 0
+    return draft.comments
+      .split(/\r?\n/)
+      .map((x) => x.trim())
+      .filter(Boolean).length
+  })()
 
   function validateBeforeSubmit() {
     const errors: string[] = []
@@ -83,23 +81,45 @@ export default function OrderForm({
     if (!draft.serviceId || !selectedService) errors.push('Vui lòng chọn Dịch vụ.')
     if (!draft.targetLink.trim()) errors.push('Vui lòng nhập Link cần tăng.')
 
-    const qty = parseQty(draft.quantity)
-    if (!Number.isFinite(qty) || qty <= 0) {
-      errors.push('Vui lòng nhập Số lượng hợp lệ.')
-    } else if (selectedService) {
-      if (qty < selectedService.min) {
-        errors.push(`Số lượng phải >= ${selectedService.min.toLocaleString('vi-VN')}.`)
-      }
-      if (qty > selectedService.max) {
-        errors.push(`Số lượng phải <= ${selectedService.max.toLocaleString('vi-VN')}.`)
+    if (needsComments) {
+      const c = draft.comments.trim()
+      if (!c) errors.push('Vui lòng nhập Bình luận.')
+      if (c.length > 10000) errors.push('Bình luận quá dài (tối đa 10000 ký tự).')
+      if (selectedService) {
+        if (commentLineCount < selectedService.min) {
+          errors.push(
+            `Service này yêu cầu tối thiểu ${selectedService.min.toLocaleString('vi-VN')} dòng bình luận.`,
+          )
+        }
+        if (commentLineCount > selectedService.max) {
+          errors.push(
+            `Service này chỉ cho tối đa ${selectedService.max.toLocaleString('vi-VN')} dòng bình luận.`,
+          )
+        }
       }
     }
 
-    if (totalVnd > 0) {
-      // If canSubmit is false due to insufficient funds, show a specific message.
-      // (The parent component already blocks submit when totalVnd > balanceVnd.)
-      if (!canSubmit) {
-        errors.push('Số dư không đủ để đặt hàng. Vui lòng nạp thêm tiền.')
+    const qty = draft.quantity
+    if (!needsComments) {
+      if (!Number.isFinite(qty) || qty <= 0) {
+        errors.push('Vui lòng nhập Số lượng hợp lệ.')
+      } else if (selectedService) {
+        if (qty < selectedService.min) {
+          errors.push(`Số lượng phải >= ${selectedService.min.toLocaleString('vi-VN')}.`)
+        }
+        if (qty > selectedService.max) {
+          errors.push(`Số lượng phải <= ${selectedService.max.toLocaleString('vi-VN')}.`)
+        }
+      }
+    }
+
+    if (!needsComments) {
+      if (totalVnd > 0) {
+        // If canSubmit is false due to insufficient funds, show a specific message.
+        // (The parent component already blocks submit when totalVnd > balanceVnd.)
+        if (!canSubmit) {
+          errors.push('Số dư không đủ để đặt hàng. Vui lòng nạp thêm tiền.')
+        }
       }
     }
 
@@ -179,7 +199,8 @@ export default function OrderForm({
               onDraftChange((d) => ({
                 ...d,
                 serviceId: nextId,
-                quantity: svc ? String(svc.min) : d.quantity,
+                quantity: svc ? svc.min : d.quantity,
+                comments: '',
               }))
             }}
             className={inputClass(false)}
@@ -189,21 +210,12 @@ export default function OrderForm({
             </option>
             {services.map((s) => (
               <option key={s.id} value={s.id}>
-                {s.id} • {s.name} • {formatVnd(s.rateVndPer1k)}
+                {s.id} • {s.name}
               </option>
             ))}
           </select>
           <div className="mt-2 text-xs text-slate-500">
-            {selectedService ? (
-              <>
-                <span className="font-semibold text-slate-700">
-                  {formatVnd(selectedService.rateVndPer1k)}
-                </span>
-                • Hoàn thành: {selectedService.avgCompletion}
-              </>
-            ) : (
-              'Chọn dịch vụ để xem chi tiết.'
-            )}
+            {selectedService ? null : 'Chọn dịch vụ để xem chi tiết.'}
           </div>
         </div>
 
@@ -221,27 +233,71 @@ export default function OrderForm({
             Hỗ trợ link bài viết, profile, video tùy dịch vụ.
           </div>
         </div>
+
+        {selectedService?.type != null &&
+        String(selectedService.type).toLowerCase() === 'custom comments' ? (
+          <div className="md:col-span-2">
+            {fieldLabel('Bình luận')}
+            <textarea
+              value={draft.comments}
+              onChange={(e) => {
+                const nextComments = e.target.value
+                const lines = nextComments
+                  .split(/\r?\n/)
+                  .map((x) => x.trim())
+                  .filter(Boolean).length
+                onDraftChange((d) => ({ ...d, comments: nextComments, quantity: lines || d.quantity }))
+              }}
+              placeholder={'Mỗi dòng là 1 comment...\nVí dụ:\nNice!\nGreat post!'}
+              className={[
+                'mt-1 min-h-[110px] w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm outline-none focus:ring-2 focus:ring-indigo-500',
+              ].join(' ')}
+            />
+            <div className="mt-2 text-xs text-slate-500">
+              Mỗi dòng là một comment.
+              {selectedService ? (
+                <>
+                  {' '}
+                  (Min <span className="font-semibold">{selectedService.min.toLocaleString('vi-VN')}</span> dòng)
+                </>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
       </div>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         <div className="md:col-span-1">
           {fieldLabel('Số lượng')}
           <input
+            type="number"
+            min={minQty}
+            max={Number.isFinite(maxQty) ? maxQty : undefined}
+            step={1}
             value={draft.quantity}
-            inputMode="text"
-            placeholder={selectedService ? String(minQty) : 'Nhập số lượng'}
-            onChange={(e) => {
-              onDraftChange((d) => ({ ...d, quantity: e.target.value }))
-            }}
-            onBlur={() => {
-              if (!selectedService) return
-              const parsed = parseQty(draft.quantity)
-              const clamped = clampQty(parsed)
-              onDraftChange((d) => ({ ...d, quantity: String(clamped) }))
-            }}
+            disabled={needsComments}
+            onChange={(e) =>
+              onDraftChange((d) => ({
+                ...d,
+                quantity: (() => {
+                  const rawNum = Number(e.target.value || 0)
+                  const raw = Number.isFinite(rawNum) ? Math.trunc(rawNum) : 0
+                  if (!selectedService) return raw
+                  const clampedMin = Math.max(minQty, raw)
+                  const clamped = Math.min(maxQty, clampedMin)
+                  return Number.isFinite(clamped) ? clamped : minQty
+                })(),
+              }))
+            }
             className={inputClass(false)}
           />
-          <div className="mt-2 text-xs text-slate-500">{quantityHint}</div>
+          <div className="mt-2 text-xs text-slate-500">
+            {needsComments
+              ? `Tự động theo số dòng bình luận: ${commentLineCount.toLocaleString(
+                  'vi-VN',
+                )} dòng (Min ${minQty.toLocaleString('vi-VN')} • Max ${Number.isFinite(maxQty) ? maxQty.toLocaleString('vi-VN') : '—'})`
+              : quantityHint}
+          </div>
         </div>
 
         <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 md:col-span-2">
@@ -256,8 +312,7 @@ export default function OrderForm({
               <div className="mt-1 text-xs text-slate-500">
                 {selectedService ? (
                   <>
-                    Công thức: Số lượng nhập vào × {formatVnd(selectedService.rateVndPer1k)} • Hoàn thành:{' '}
-                    {selectedService.avgCompletion}
+                    Công thức: (Số lượng / 1000) × {formatVnd(selectedService.rateVndPer1k)}
                   </>
                 ) : (
                   'Công thức: (Số lượng / 1000) × Giá/1k'
@@ -268,7 +323,7 @@ export default function OrderForm({
             <button
               type="button"
               onClick={() => {
-                if (isGuest) return onRequireAuth()
+                if (submitting) return
                 const errors = validateBeforeSubmit()
                 if (errors.length) {
                   toast({
@@ -279,14 +334,28 @@ export default function OrderForm({
                   })
                   return
                 }
+                if (isGuest) return onRequireAuth()
                 onSubmit()
               }}
+              disabled={Boolean(submitting)}
               className={[
                 'inline-flex h-11 items-center justify-center rounded-lg px-5 text-sm font-semibold shadow-sm transition',
-                'bg-indigo-600 text-white hover:bg-indigo-700',
+                submitting
+                  ? 'cursor-not-allowed bg-indigo-400 text-white'
+                  : 'bg-indigo-600 text-white hover:bg-indigo-700',
               ].join(' ')}
             >
-              Đặt hàng
+              {submitting ? (
+                <span className="inline-flex items-center gap-2">
+                  <span
+                    className="size-4 animate-spin rounded-full border-2 border-white/40 border-t-white"
+                    aria-hidden="true"
+                  />
+                  Đang đặt...
+                </span>
+              ) : (
+                'Đặt hàng'
+              )}
             </button>
           </div>
           {!canSubmit ? (

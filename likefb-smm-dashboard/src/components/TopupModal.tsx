@@ -4,7 +4,6 @@ import { useToast } from '../ui/toast'
 type TopupModalProps = {
   open: boolean
   onClose(): void
-  userId?: string
   userEmail?: string
 }
 
@@ -114,7 +113,7 @@ export default function TopupModal({ open, onClose, userEmail }: TopupModalProps
                         kind: 'success',
                         title: 'Đã copy',
                         description: 'Tên người nhận',
-                        durationMs: 2000,
+                        durationMs: 2500,
                       })
                     }}
                   />
@@ -128,7 +127,7 @@ export default function TopupModal({ open, onClose, userEmail }: TopupModalProps
                         kind: 'success',
                         title: 'Đã copy',
                         description: 'Nội dung chuyển khoản',
-                        durationMs: 2000,
+                        durationMs: 2500,
                       })
                     }}
                   />

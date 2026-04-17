@@ -54,11 +54,53 @@ create table if not exists orders (
   markup_multiplier numeric not null,
   sell_total_vnd bigint not null,
   smm_order_id text,
-  status text not null default 'created',
+  smm_status text default 'Pending',
+  smm_status_raw jsonb,
+  smm_status_updated_at timestamptz,
+  refunded_vnd bigint not null default 0,
+  refunded_at timestamptz,
+  error_code text,
+  error_detail text,
   created_at timestamptz not null default now()
 );
 
+alter table orders drop column if exists status;
+alter table orders add column if not exists smm_status text;
+alter table orders add column if not exists smm_status_raw jsonb;
+alter table orders add column if not exists smm_status_updated_at timestamptz;
+alter table orders alter column smm_status set default 'Pending';
+alter table orders add column if not exists refunded_vnd bigint not null default 0;
+alter table orders add column if not exists refunded_at timestamptz;
+alter table orders add column if not exists error_code text;
+alter table orders add column if not exists error_detail text;
+
 create index if not exists orders_user_id_created_at_idx on orders(user_id, created_at desc);
+
+create table if not exists free_like_orders (
+  id uuid primary key,
+  user_id uuid not null references users(id) on delete cascade,
+  platform text not null,
+  smm_service_id text not null,
+  link text not null,
+  quantity integer not null,
+  smm_order_id text,
+  smm_status text default 'Pending',
+  smm_status_raw jsonb,
+  smm_status_updated_at timestamptz,
+  error_code text,
+  error_detail text,
+  created_at timestamptz not null default now()
+);
+
+alter table free_like_orders add column if not exists smm_order_id text;
+alter table free_like_orders add column if not exists smm_status text;
+alter table free_like_orders add column if not exists smm_status_raw jsonb;
+alter table free_like_orders add column if not exists smm_status_updated_at timestamptz;
+alter table free_like_orders alter column smm_status set default 'Pending';
+alter table free_like_orders add column if not exists error_code text;
+alter table free_like_orders add column if not exists error_detail text;
+
+create index if not exists free_like_orders_user_id_created_at_idx on free_like_orders(user_id, created_at desc);
 `
 
 async function main() {

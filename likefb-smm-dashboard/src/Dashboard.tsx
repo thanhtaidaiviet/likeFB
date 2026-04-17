@@ -1,12 +1,13 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import Header from './components/Header'
 import OrderForm, { type OrderDraft } from './components/OrderForm'
 import Sidebar, { type NavItem } from './components/Sidebar'
 import TopupModal from './components/TopupModal'
 import UserPanel from './components/UserPanel'
 import { useAuth } from './auth/AuthContext'
-import { apiOrdersPlace, apiSmmAdd, apiSmmServicesPublic } from './api/smm'
+import { apiAdminTopup, apiAdminUsers, apiFreeLikePlace, apiOrdersPlace, apiSmmServicesPublic } from './api/smm'
 import { SERVICE_OVERRIDES } from './servicesOverrides'
+import { useToast } from './ui/toast'
 
 import type { Category, Platform, SmmService } from './types'
 
@@ -124,13 +125,19 @@ function formatVnd(n: number) {
 }
 
 const FREE_LIKE_SERVICES: Record<string, string> = {
-  Facebook: '4042',
+  // 4042 is listed by panel but rejects `action=add` (Service ID does not exists)
+  Facebook: '4122',
   TikTok: '4876',
   Instagram: '4874',
 }
 
+const ADMIN_EMAIL = 'adminlike@gmail.com'
+
+type AdminUserRow = { id: string; email: string; balanceVnd: number }
+
 export default function Dashboard() {
   const { status, user, token, logout, openLogin } = useAuth()
+  const { toast } = useToast()
   const [activeNav, setActiveNav] = useState<Platform>('')
   const [balanceVnd, setBalanceVnd] = useState<number>(0)
   const [services, setServices] = useState<SmmService[]>([])
@@ -142,6 +149,26 @@ export default function Dashboard() {
   const [freeServiceId, setFreeServiceId] = useState<string>('4042')
   const [freeQty, setFreeQty] = useState<number>(10)
   const [freeLink, setFreeLink] = useState<string>('')
+  const [freeLikeBusy, setFreeLikeBusy] = useState(false)
+  const [freeLinkTouched, setFreeLinkTouched] = useState(false)
+  const freeLinkInputRef = useRef<HTMLInputElement | null>(null)
+  const [adminTopupOpen, setAdminTopupOpen] = useState(false)
+  const [adminTopupEmail, setAdminTopupEmail] = useState('')
+  const [adminTopupEmailTouched, setAdminTopupEmailTouched] = useState(false)
+  const [adminTopupAmount, setAdminTopupAmount] = useState<number>(10000)
+  const [adminTopupBusy, setAdminTopupBusy] = useState(false)
+  const adminTopupEmailInputRef = useRef<HTMLInputElement | null>(null)
+
+  const [placingOrder, setPlacingOrder] = useState(false)
+
+  const [adminUsersOpen, setAdminUsersOpen] = useState(false)
+  const [adminUsersQuery, setAdminUsersQuery] = useState('')
+  const [adminUsers, setAdminUsers] = useState<AdminUserRow[]>([])
+  const [adminUsersTotal, setAdminUsersTotal] = useState(0)
+  const [adminUsersPage, setAdminUsersPage] = useState(1)
+  const [adminUsersBusy, setAdminUsersBusy] = useState(false)
+  const [adminUsersError, setAdminUsersError] = useState<string | null>(null)
+  const ADMIN_USERS_PAGE_SIZE = 5
 
   const [draft, setDraft] = useState<OrderDraft>({
     search: '',
@@ -149,7 +176,8 @@ export default function Dashboard() {
     category: 'All',
     serviceId: '',
     targetLink: '',
-    quantity: '1000',
+    quantity: 1000,
+    comments: '',
   })
 
   useEffect(() => {
@@ -174,6 +202,7 @@ export default function Dashboard() {
               platform: ov?.platform ?? coercePlatform(r.platform, r.category, r.name),
               category: ov?.category ?? String(r.category),
               name: ov?.name ?? r.name,
+              type: r.type,
               desc: r.desc,
               panelRateVndPer1k: panelRate,
               markupMultiplier,
@@ -393,6 +422,7 @@ export default function Dashboard() {
       category: 'All',
       serviceId: '',
       search: '',
+      comments: '',
     }))
   }
 
@@ -400,36 +430,52 @@ export default function Dashboard() {
     if (!selectedService) return
     if (!canSubmit) return
     if (!token) return openLogin()
+    if (placingOrder) return
 
+    setPlacingOrder(true)
     try {
-      const qty = parseQty(draft.quantity)
-      if (!Number.isFinite(qty)) return
       const res = await apiOrdersPlace(token, {
         service: selectedService.id,
         link: draft.targetLink.trim(),
-        quantity: qty,
+        quantity: draft.quantity,
+        comments: draft.comments.trim() ? draft.comments : undefined,
       })
 
       setBalanceVnd(res.balanceVnd)
       setDraft((d) => ({
         ...d,
         targetLink: '',
-        quantity: String(selectedService.min),
+        quantity: selectedService.min,
+        comments: '',
       }))
-      // eslint-disable-next-line no-alert
-      alert(
-        `Đặt hàng thành công!\n\nService: ${selectedService.id}\nLink: ${draft.targetLink}\nSố lượng: ${qty}\nKết quả: ${JSON.stringify(
-          res.smm,
+      toast({
+        kind: 'success',
+        title: 'Đặt hàng thành công',
+        description: `Service ${selectedService.id} • SL ${draft.quantity.toLocaleString('vi-VN')} • Trừ ${formatVnd(
+          res.chargedVnd,
         )}`,
-      )
+        durationMs: 4500,
+      })
     } catch (e: any) {
-      // eslint-disable-next-line no-alert
-      alert(`Đặt hàng thất bại: ${e?.message || 'SMM_ADD_FAILED'}`)
+      const raw = String(e?.message || 'ORDER_PLACE_FAILED')
+      const hint =
+        raw.includes('Service ID does not exists')
+          ? `${raw}\nGợi ý: Panel có thể yêu cầu SMM_COOKIE hoặc SMM_API_URL/SMM_API_KEY chưa đúng.`
+          : raw
+      toast({
+        kind: 'error',
+        title: 'Đặt hàng thất bại',
+        description: hint,
+        durationMs: 6000,
+      })
+    } finally {
+      setPlacingOrder(false)
     }
   }
 
   async function handleFreeLikeSubmit() {
     if (!token) return openLogin()
+    if (freeLikeBusy) return
     if (!freePlatform) {
       // eslint-disable-next-line no-alert
       alert('Vui lòng chọn nền tảng.')
@@ -440,26 +486,113 @@ export default function Dashboard() {
       alert('Không tìm thấy dịch vụ theo nền tảng. Vui lòng thử lại sau.')
       return
     }
+    setFreeLinkTouched(true)
     const link = freeLink.trim()
     if (!link) {
-      // eslint-disable-next-line no-alert
-      alert('Vui lòng nhập link cần tăng.')
+      freeLinkInputRef.current?.focus()
       return
     }
     const qty = Number.isFinite(freeQty) ? freeQty : freeServiceForPlatform.min
     try {
-      const res = await apiSmmAdd(token, { service: freeServiceId, link, quantity: qty })
+      setFreeLikeBusy(true)
+      const res = await apiFreeLikePlace(token, { platform: freePlatform, service: freeServiceId, link, quantity: qty })
       setFreeLink('')
       setFreeLikeOpen(false)
+      setFreeLinkTouched(false)
+      toast({
+        kind: 'success',
+        title: 'Tăng like miễn phí thành công',
+        description: `Service ${freeServiceId} • SL ${qty.toLocaleString('vi-VN')} • Mã: ${res.smmOrderId ?? '—'}`,
+        durationMs: 4500,
+      })
+    } catch (e: any) {
+      toast({
+        kind: 'error',
+        title: 'Tăng like miễn phí thất bại',
+        description: String(e?.message || 'SMM_ADD_FAILED'),
+        durationMs: 6000,
+      })
+    } finally {
+      setFreeLikeBusy(false)
+    }
+  }
+
+  const isAdmin = status === 'authed' && String(user?.email || '').toLowerCase() === ADMIN_EMAIL
+
+  const adminTopupEmailTrimmed = adminTopupEmail.trim().toLowerCase()
+  const adminTopupEmailValid = Boolean(adminTopupEmailTrimmed) && adminTopupEmailTrimmed.includes('@')
+
+  async function loadAdminUsers(opts?: { q?: string; page?: number }) {
+    if (!token) return openLogin()
+    if (!isAdmin) return
+
+    const page = Math.max(1, Math.trunc(opts?.page ?? adminUsersPage))
+    const nextQ = opts?.q ?? adminUsersQuery
+    const offset = (page - 1) * ADMIN_USERS_PAGE_SIZE
+
+    setAdminUsersBusy(true)
+    setAdminUsersError(null)
+    try {
+      const res = await apiAdminUsers(token, { q: nextQ, limit: ADMIN_USERS_PAGE_SIZE, offset })
+      setAdminUsers(res.users)
+      setAdminUsersTotal(Number(res.total) || 0)
+      setAdminUsersPage(page)
+    } catch (e: any) {
+      setAdminUsersError(String(e?.message || 'ADMIN_USERS_FAILED'))
+    } finally {
+      setAdminUsersBusy(false)
+    }
+  }
+
+  async function handleAdminTopupSubmit() {
+    if (!token) return openLogin()
+    if (!isAdmin) return
+
+    setAdminTopupEmailTouched(true)
+    const email = adminTopupEmailTrimmed
+    if (!email) {
+      adminTopupEmailInputRef.current?.focus()
+      return
+    }
+    if (!email.includes('@')) {
+      adminTopupEmailInputRef.current?.focus()
+      return
+    }
+
+    const amount = Math.round(Number(adminTopupAmount))
+    if (!Number.isFinite(amount) || amount <= 0) {
+      // eslint-disable-next-line no-alert
+      alert('Số tiền không hợp lệ.')
+      return
+    }
+
+    setAdminTopupBusy(true)
+    try {
+      const res = await apiAdminTopup(token, { email, amountVnd: amount })
       // eslint-disable-next-line no-alert
       alert(
-        `Tăng like: gửi thành công!\n\nService: ${freeServiceId}\nLink: ${link}\nKết quả: ${JSON.stringify(
-          res,
-        )}`,
+        `Nạp tiền thành công!\n\nUser: ${res.user.email}\nCộng: ${res.amountVnd.toLocaleString(
+          'vi-VN',
+        )} ₫\nBalance mới: ${res.user.balanceVnd.toLocaleString('vi-VN')} ₫`,
       )
+      setAdminTopupOpen(false)
+      setAdminTopupEmail('')
     } catch (e: any) {
+      const msg = String(e?.message || '')
+      if (msg.includes('USER_NOT_FOUND')) {
+        // eslint-disable-next-line no-alert
+        alert(`Không tìm thấy user trong DB theo email: ${email}`)
+        return
+      }
+      if (msg.includes('FORBIDDEN')) {
+        // eslint-disable-next-line no-alert
+        alert('Bạn không có quyền nạp tiền.')
+        return
+      }
       // eslint-disable-next-line no-alert
-      alert(`Tăng like thất bại: ${e?.message || 'SMM_ADD_FAILED'}`)
+      alert(`Nạp tiền thất bại: ${e?.message || 'TOPUP_FAILED'}`)
+    } finally {
+      setAdminTopupBusy(false)
     }
   }
 
@@ -502,6 +635,46 @@ export default function Dashboard() {
                   </div>
                 </div>
               </div>
+
+              {isAdmin ? (
+                <div className="grid gap-3 md:grid-cols-2">
+                  <button
+                    type="button"
+                    onClick={() => setAdminTopupOpen(true)}
+                    className="rounded-xl border border-indigo-200 bg-indigo-50 p-4 text-left text-indigo-950 transition hover:bg-indigo-100/60"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="font-semibold">Admin: Nạp tiền user</div>
+                        <div className="mt-1 text-sm text-indigo-800">
+                          Nhập email user và số tiền cần cộng vào balance.
+                        </div>
+                      </div>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAdminUsersOpen(true)
+                      // load on open (no search)
+                      setAdminUsersQuery('')
+                      setAdminUsersPage(1)
+                      void loadAdminUsers({ q: '', page: 1 })
+                    }}
+                    className="rounded-xl border border-slate-200 bg-white p-4 text-left text-slate-950 transition hover:bg-slate-50"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="font-semibold">Admin: Danh sách user</div>
+                        <div className="mt-1 text-sm text-slate-600">
+                          Xem email và số dư (balance_vnd), có tìm kiếm.
+                        </div>
+                      </div>
+                    </div>
+                  </button>
+                </div>
+              ) : null}
 
               <button
                 type="button"
@@ -548,6 +721,7 @@ export default function Dashboard() {
                     onSubmit={handleSubmit}
                     isGuest={status !== 'authed'}
                     onRequireAuth={openLogin}
+                    submitting={placingOrder}
                   />
                 </div>
               </div>
@@ -563,6 +737,9 @@ export default function Dashboard() {
               balanceVnd={balanceVnd}
               formatVnd={formatVnd}
               service={selectedService}
+              token={token}
+              isAuthed={status === 'authed'}
+              isAdmin={isAdmin}
             />
           </div>
         </aside>
@@ -571,16 +748,17 @@ export default function Dashboard() {
       <TopupModal
         open={topupOpen}
         onClose={() => setTopupOpen(false)}
-        userId={status === 'authed' ? user?.id : undefined}
         userEmail={status === 'authed' ? user?.email : undefined}
       />
 
       <div className="fixed bottom-6 right-6 z-[54] flex flex-col gap-3">
         <a
           href={
-            (import.meta.env.VITE_TELEGRAM_SUPPORT_USERNAME as string | undefined)
-              ? `https://t.me/${import.meta.env.VITE_TELEGRAM_SUPPORT_USERNAME as string}`
-              : 'https://t.me/'
+            (import.meta.env.VITE_TELEGRAM_SUPPORT_URL as string | undefined)
+              ? (import.meta.env.VITE_TELEGRAM_SUPPORT_URL as string)
+              : (import.meta.env.VITE_TELEGRAM_SUPPORT_USERNAME as string | undefined)
+                ? `https://t.me/${import.meta.env.VITE_TELEGRAM_SUPPORT_USERNAME as string}`
+                : 'https://t.me/'
           }
           target="_blank"
           rel="noreferrer"
@@ -698,7 +876,12 @@ export default function Dashboard() {
                   </div>
                   <input
                     value={freeLink}
-                    onChange={(e) => setFreeLink(e.target.value)}
+                    ref={freeLinkInputRef}
+                    onChange={(e) => {
+                      setFreeLink(e.target.value)
+                      if (!freeLinkTouched) setFreeLinkTouched(true)
+                    }}
+                    onBlur={() => setFreeLinkTouched(true)}
                     placeholder="https://..."
                     disabled={!freePlatform || !freeServiceForPlatform}
                     className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm shadow-sm outline-none focus:ring-2 focus:ring-emerald-500"
@@ -706,6 +889,10 @@ export default function Dashboard() {
                   {!freePlatform || !freeServiceForPlatform ? (
                     <div className="mt-1 text-xs text-slate-500">
                       Vui lòng chọn nền tảng (và dịch vụ hợp lệ) trước khi nhập link.
+                    </div>
+                  ) : freeLinkTouched && !freeLink.trim() ? (
+                    <div className="mt-1 text-xs font-semibold text-rose-700">
+                      Bắt buộc nhập link cần tăng.
                     </div>
                   ) : null}
                 </div>
@@ -733,13 +920,253 @@ export default function Dashboard() {
                 <button
                   type="button"
                   onClick={handleFreeLikeSubmit}
+                  disabled={freeLikeBusy}
                   className={[
-                    'inline-flex h-10 items-center justify-center rounded-lg px-4 text-sm font-semibold shadow-sm transition',
-                    'bg-emerald-600 text-white hover:bg-emerald-700',
+                    'inline-flex h-10 items-center justify-center rounded-lg px-4 text-sm font-semibold shadow-sm transition disabled:cursor-not-allowed disabled:opacity-60',
+                    freeLikeBusy ? 'bg-emerald-400 text-white' : 'bg-emerald-600 text-white hover:bg-emerald-700',
                   ].join(' ')}
                 >
-                  Tăng like
+                  {freeLikeBusy ? 'Đang tăng...' : 'Tăng like'}
                 </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {adminTopupOpen ? (
+        <div className="fixed inset-0 z-[46]">
+          <div
+            className="absolute inset-0 bg-slate-900/40"
+            onClick={() => (adminTopupBusy ? null : setAdminTopupOpen(false))}
+            role="button"
+            tabIndex={0}
+            aria-label="Đóng"
+          />
+          <div className="absolute inset-0 flex items-center justify-center p-4">
+            <div className="w-full max-w-xl rounded-2xl border border-slate-200 bg-white shadow-xl">
+              <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-5 py-4">
+                <div className="min-w-0">
+                  <div className="truncate text-base font-semibold text-slate-900">
+                    Admin: Nạp tiền
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => (adminTopupBusy ? null : setAdminTopupOpen(false))}
+                  className="inline-flex size-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-800 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                  aria-label="Đóng"
+                  disabled={adminTopupBusy}
+                >
+                  ×
+                </button>
+              </div>
+
+              <div className="grid gap-4 p-5">
+                <div>
+                  <div className="text-xs font-semibold uppercase tracking-wide text-slate-600">
+                    Email user
+                  </div>
+                  <input
+                    ref={adminTopupEmailInputRef}
+                    value={adminTopupEmail}
+                    onChange={(e) => {
+                      setAdminTopupEmail(e.target.value)
+                      if (!adminTopupEmailTouched) setAdminTopupEmailTouched(true)
+                    }}
+                    onBlur={() => setAdminTopupEmailTouched(true)}
+                    placeholder="user@example.com"
+                    disabled={adminTopupBusy}
+                    className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm shadow-sm outline-none focus:ring-2 focus:ring-indigo-500 disabled:cursor-not-allowed disabled:bg-slate-50"
+                  />
+                  {adminTopupEmailTouched && !adminTopupEmailTrimmed ? (
+                    <div className="mt-1 text-xs font-semibold text-rose-700">
+                      Bắt buộc nhập email user.
+                    </div>
+                  ) : adminTopupEmailTouched && adminTopupEmailTrimmed && !adminTopupEmailValid ? (
+                    <div className="mt-1 text-xs font-semibold text-rose-700">
+                      Email không hợp lệ.
+                    </div>
+                  ) : null}
+                </div>
+
+                <div>
+                  <div className="text-xs font-semibold uppercase tracking-wide text-slate-600">
+                    Số tiền (VND)
+                  </div>
+                  <input
+                    value={adminTopupAmount}
+                    onChange={(e) => setAdminTopupAmount(Number(e.target.value))}
+                    placeholder="10000"
+                    disabled={adminTopupBusy}
+                    inputMode="numeric"
+                    className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm shadow-sm outline-none focus:ring-2 focus:ring-indigo-500 disabled:cursor-not-allowed disabled:bg-slate-50"
+                  />
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-2 border-t border-slate-200 px-5 py-4 sm:flex-row sm:justify-end">
+                <button
+                  type="button"
+                  onClick={() => setAdminTopupOpen(false)}
+                  disabled={adminTopupBusy}
+                  className="inline-flex h-10 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-800 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Đóng
+                </button>
+                <button
+                  type="button"
+                  onClick={handleAdminTopupSubmit}
+                  disabled={adminTopupBusy}
+                  className={[
+                    'inline-flex h-10 items-center justify-center rounded-lg px-4 text-sm font-semibold shadow-sm transition disabled:cursor-not-allowed disabled:opacity-60',
+                    'bg-indigo-600 text-white hover:bg-indigo-700',
+                  ].join(' ')}
+                >
+                  {adminTopupBusy ? 'Đang nạp...' : 'Nạp tiền'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {adminUsersOpen ? (
+        <div className="fixed inset-0 z-[47]">
+          <div
+            className="absolute inset-0 bg-slate-900/40"
+            onClick={() => (adminUsersBusy ? null : setAdminUsersOpen(false))}
+            role="button"
+            tabIndex={0}
+            aria-label="Đóng"
+          />
+          <div className="absolute inset-0 flex items-center justify-center p-4">
+            <div className="w-full max-w-4xl rounded-2xl border border-slate-200 bg-white shadow-xl">
+              <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-5 py-4">
+                <div className="min-w-0">
+                  <div className="truncate text-base font-semibold text-slate-900">
+                    Admin: Danh sách user
+                  </div>
+                  <div className="mt-0.5 text-sm text-slate-600">
+                    Tìm theo email. Hiển thị số dư hiện tại (balance_vnd).
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => (adminUsersBusy ? null : setAdminUsersOpen(false))}
+                  className="inline-flex size-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-800 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                  aria-label="Đóng"
+                  disabled={adminUsersBusy}
+                >
+                  ×
+                </button>
+              </div>
+
+              <div className="grid gap-3 p-5">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                  <input
+                    value={adminUsersQuery}
+                    onChange={(e) => setAdminUsersQuery(e.target.value)}
+                    placeholder="Nhập email để tìm..."
+                    disabled={adminUsersBusy}
+                    className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm shadow-sm outline-none focus:ring-2 focus:ring-slate-500 disabled:cursor-not-allowed disabled:bg-slate-50 sm:flex-1"
+                  />
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => void loadAdminUsers({ q: adminUsersQuery, page: 1 })}
+                      disabled={adminUsersBusy}
+                      className="inline-flex h-10 items-center justify-center rounded-lg bg-slate-900 px-4 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {adminUsersBusy ? 'Đang tải...' : 'Tìm'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAdminUsersQuery('')
+                        void loadAdminUsers({ q: '', page: 1 })
+                      }}
+                      disabled={adminUsersBusy}
+                      className="inline-flex h-10 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-800 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      Reset
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="text-sm text-slate-600">
+                    Tổng: <span className="font-semibold text-slate-900">{adminUsersTotal}</span> user
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      disabled={adminUsersBusy || adminUsersPage <= 1}
+                      onClick={() =>
+                        void loadAdminUsers({ q: adminUsersQuery, page: Math.max(1, adminUsersPage - 1) })
+                      }
+                      className="inline-flex h-9 items-center justify-center rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-800 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      Prev
+                    </button>
+                    <div className="text-sm font-semibold text-slate-900">
+                      Trang {adminUsersPage}
+                    </div>
+                    <button
+                      type="button"
+                      disabled={
+                        adminUsersBusy ||
+                        adminUsersPage * ADMIN_USERS_PAGE_SIZE >= adminUsersTotal ||
+                        adminUsersTotal <= 0
+                      }
+                      onClick={() => void loadAdminUsers({ q: adminUsersQuery, page: adminUsersPage + 1 })}
+                      className="inline-flex h-9 items-center justify-center rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-800 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
+
+                {adminUsersError ? (
+                  <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-900">
+                    Lỗi: {adminUsersError}
+                  </div>
+                ) : null}
+
+                <div className="overflow-hidden rounded-xl border border-slate-200">
+                  <div className="max-h-[60vh] overflow-auto">
+                    <table className="min-w-full divide-y divide-slate-200 text-sm">
+                      <thead className="sticky top-0 bg-slate-50">
+                        <tr>
+                          <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
+                            Email
+                          </th>
+                          <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-600">
+                            Balance (VND)
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-200 bg-white">
+                        {adminUsers.length ? (
+                          adminUsers.map((u) => (
+                            <tr key={u.id} className="hover:bg-slate-50">
+                              <td className="px-4 py-3 font-medium text-slate-900">{u.email}</td>
+                              <td className="px-4 py-3 text-right font-semibold text-slate-900">
+                                {formatVnd(u.balanceVnd)}
+                              </td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td className="px-4 py-6 text-center text-slate-600" colSpan={2}>
+                              {adminUsersBusy ? 'Đang tải...' : 'Không có dữ liệu.'}
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
               </div>
             </div>
           </div>

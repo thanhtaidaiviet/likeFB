@@ -3,13 +3,17 @@ import { z } from 'zod'
 import { getPool } from '../_lib/pool.js'
 import { verifyPassword } from '../_lib/password.js'
 import { signAccessToken } from '../_lib/jwt.js'
-import { onlyMethods, sendJson } from '../_lib/http.js'
+import { onlyMethods, readJsonBody, sendJson } from '../_lib/http.js'
 import { describeDbError } from '../_lib/db-error.js'
 
-const loginSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(1).max(200),
-})
+const ADMIN_EMAIL = 'adminlike@gmail.com'
+
+const loginSchema = z
+  .object({
+    email: z.string().min(1).max(320),
+    password: z.string().min(1).max(200),
+  })
+  .strict()
 
 function inputErrorCode(err: z.ZodError) {
   for (const issue of err.issues) {
@@ -24,10 +28,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!onlyMethods(req, res, ['POST'])) return
 
   try {
-    const parsed = loginSchema.safeParse(req.body)
+    let body: unknown
+    try {
+      body = await readJsonBody(req)
+    } catch {
+      return sendJson(res, 400, { error: 'INVALID_INPUT' })
+    }
+
+    const parsed = loginSchema.safeParse(body)
     if (!parsed.success) return sendJson(res, 400, { error: inputErrorCode(parsed.error) })
 
-    const { email, password } = parsed.data
+    let { email, password } = parsed.data
+
+    const raw = String(email).trim()
+    const isAdminAlias = raw.toLowerCase() === 'admin'
+    if (isAdminAlias) {
+      email = ADMIN_EMAIL
+    } else {
+      const okEmail = z.string().email().safeParse(raw)
+      if (!okEmail.success) return sendJson(res, 400, { error: 'EMAIL_INVALID' })
+      email = okEmail.data
+    }
 
     const result = await getPool().query('select id, email, password_hash, balance_vnd from users where email = $1', [
       email.toLowerCase(),
