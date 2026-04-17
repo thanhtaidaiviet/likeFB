@@ -28,7 +28,7 @@ async function copyText(text: string) {
   document.body.removeChild(el)
 }
 
-export default function TopupModal({ open, onClose, userId, userEmail }: TopupModalProps) {
+export default function TopupModal({ open, onClose, userEmail }: TopupModalProps) {
   const { toast } = useToast()
 
   const momoName = env('VITE_MOMO_NAME') || 'Nguyễn Quốc Cường'
@@ -110,7 +110,12 @@ export default function TopupModal({ open, onClose, userId, userEmail }: TopupMo
                     value={momoName}
                     onCopy={async () => {
                       await copyText(momoName)
-                      toast({ kind: 'success', title: 'Đã copy', description: 'Tên người nhận' })
+                      toast({
+                        kind: 'success',
+                        title: 'Đã copy',
+                        description: 'Tên người nhận',
+                        durationMs: 2000,
+                      })
                     }}
                   />
                   <Field
@@ -119,7 +124,12 @@ export default function TopupModal({ open, onClose, userId, userEmail }: TopupMo
                     valueClassName="font-extrabold text-rose-700"
                     onCopy={async () => {
                       await copyText(transferNote)
-                      toast({ kind: 'success', title: 'Đã copy', description: 'Nội dung chuyển khoản' })
+                      toast({
+                        kind: 'success',
+                        title: 'Đã copy',
+                        description: 'Nội dung chuyển khoản',
+                        durationMs: 2000,
+                      })
                     }}
                   />
                 </div>

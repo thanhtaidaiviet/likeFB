@@ -1,21 +1,14 @@
 import { useMemo } from 'react'
-import type { NavItem } from './Sidebar'
 
 export default function Header({
   userName,
   isAuthed,
-  activePlatform,
-  mobileMenuItems,
-  onMobileNavChange,
   onTopupClick,
   onLoginClick,
   onLogoutClick,
 }: {
   userName: string
   isAuthed: boolean
-  activePlatform: string
-  mobileMenuItems: NavItem[]
-  onMobileNavChange: (value: string) => void
   onTopupClick(): void
   onLoginClick(): void
   onLogoutClick(): void
@@ -37,13 +30,15 @@ export default function Header({
         </div>
 
         <div className="flex items-center gap-3">
-          <button
-            type="button"
-            onClick={onTopupClick}
-            className="inline-flex items-center justify-center rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
-          >
-            Nạp tiền
-          </button>
+          {isAuthed ? (
+            <button
+              type="button"
+              onClick={onTopupClick}
+              className="inline-flex items-center justify-center rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
+            >
+              Nạp tiền
+            </button>
+          ) : null}
 
           <div className="hidden items-center gap-3 sm:flex">
             <div className="grid size-10 place-items-center rounded-full bg-indigo-600 text-sm font-extrabold text-white">

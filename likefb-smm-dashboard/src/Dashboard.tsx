@@ -109,6 +109,14 @@ function roundVnd(n: number) {
   return Math.round(n)
 }
 
+function parseQty(text: string) {
+  const raw = String(text ?? '')
+  const digits = raw.replace(/[^\d]/g, '')
+  if (!digits) return NaN
+  const n = Number(digits)
+  return Number.isFinite(n) ? n : NaN
+}
+
 const DEFAULT_MARKUP = 1.5
 
 function formatVnd(n: number) {
@@ -141,7 +149,7 @@ export default function Dashboard() {
     category: 'All',
     serviceId: '',
     targetLink: '',
-    quantity: 1000,
+    quantity: '1000',
   })
 
   useEffect(() => {
@@ -361,16 +369,17 @@ export default function Dashboard() {
 
   const totalVnd = useMemo(() => {
     if (!selectedService) return 0
-    const qty = Number.isFinite(draft.quantity) ? draft.quantity : 0
+    const qty = parseQty(draft.quantity)
+    if (!Number.isFinite(qty)) return 0
     return Math.max(0, roundVnd((qty / 1000) * selectedService.rateVndPer1k))
   }, [draft.quantity, selectedService])
 
   const canSubmit = useMemo(() => {
     if (!selectedService) return false
     if (!draft.targetLink.trim()) return false
-    if (!Number.isFinite(draft.quantity)) return false
-    if (draft.quantity < selectedService.min || draft.quantity > selectedService.max)
-      return false
+    const qty = parseQty(draft.quantity)
+    if (!Number.isFinite(qty)) return false
+    if (qty < selectedService.min || qty > selectedService.max) return false
     if (totalVnd <= 0) return false
     if (totalVnd > balanceVnd) return false
     return true
@@ -393,21 +402,23 @@ export default function Dashboard() {
     if (!token) return openLogin()
 
     try {
+      const qty = parseQty(draft.quantity)
+      if (!Number.isFinite(qty)) return
       const res = await apiOrdersPlace(token, {
         service: selectedService.id,
         link: draft.targetLink.trim(),
-        quantity: draft.quantity,
+        quantity: qty,
       })
 
       setBalanceVnd(res.balanceVnd)
       setDraft((d) => ({
         ...d,
         targetLink: '',
-        quantity: selectedService.min,
+        quantity: String(selectedService.min),
       }))
       // eslint-disable-next-line no-alert
       alert(
-        `Đặt hàng thành công!\n\nService: ${selectedService.id}\nLink: ${draft.targetLink}\nSố lượng: ${draft.quantity}\nKết quả: ${JSON.stringify(
+        `Đặt hàng thành công!\n\nService: ${selectedService.id}\nLink: ${draft.targetLink}\nSố lượng: ${qty}\nKết quả: ${JSON.stringify(
           res.smm,
         )}`,
       )
@@ -467,10 +478,10 @@ export default function Dashboard() {
           <Header
             userName={user?.email ?? 'user'}
             isAuthed={status === 'authed'}
-            activePlatform={activeNav}
-            mobileMenuItems={navItems}
-            onMobileNavChange={(v) => handleNavChange(v as Platform)}
-            onTopupClick={() => setTopupOpen(true)}
+            onTopupClick={() => {
+              if (status !== 'authed') return openLogin()
+              setTopupOpen(true)
+            }}
             onLoginClick={openLogin}
             onLogoutClick={logout}
           />

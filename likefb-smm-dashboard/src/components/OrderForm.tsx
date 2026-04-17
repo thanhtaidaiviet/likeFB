@@ -8,7 +8,7 @@ export type OrderDraft = {
   category: Category
   serviceId: string
   targetLink: string
-  quantity: number
+  quantity: string
 }
 
 function fieldLabel(s: string) {
@@ -60,6 +60,21 @@ export default function OrderForm({
   const minQty = selectedService?.min ?? 0
   const maxQty = selectedService?.max ?? Number.MAX_SAFE_INTEGER
 
+  function parseQty(text: string) {
+    const raw = String(text ?? '')
+    const digits = raw.replace(/[^\d]/g, '')
+    if (!digits) return NaN
+    const n = Number(digits)
+    return Number.isFinite(n) ? n : NaN
+  }
+
+  function clampQty(n: number) {
+    if (!Number.isFinite(n)) return minQty
+    const up = Math.max(minQty, n)
+    const down = Math.min(maxQty, up)
+    return Number.isFinite(down) ? down : minQty
+  }
+
   function validateBeforeSubmit() {
     const errors: string[] = []
 
@@ -68,7 +83,7 @@ export default function OrderForm({
     if (!draft.serviceId || !selectedService) errors.push('Vui lòng chọn Dịch vụ.')
     if (!draft.targetLink.trim()) errors.push('Vui lòng nhập Link cần tăng.')
 
-    const qty = draft.quantity
+    const qty = parseQty(draft.quantity)
     if (!Number.isFinite(qty) || qty <= 0) {
       errors.push('Vui lòng nhập Số lượng hợp lệ.')
     } else if (selectedService) {
@@ -164,7 +179,7 @@ export default function OrderForm({
               onDraftChange((d) => ({
                 ...d,
                 serviceId: nextId,
-                quantity: svc ? svc.min : d.quantity,
+                quantity: svc ? String(svc.min) : d.quantity,
               }))
             }}
             className={inputClass(false)}
@@ -212,23 +227,18 @@ export default function OrderForm({
         <div className="md:col-span-1">
           {fieldLabel('Số lượng')}
           <input
-            type="number"
-            min={minQty}
-            max={Number.isFinite(maxQty) ? maxQty : undefined}
-            step={1}
             value={draft.quantity}
-            onChange={(e) =>
-              onDraftChange((d) => ({
-                ...d,
-                quantity: (() => {
-                  const raw = Number(e.target.value || 0)
-                  if (!selectedService) return raw
-                  const clampedMin = Math.max(minQty, raw)
-                  const clamped = Math.min(maxQty, clampedMin)
-                  return Number.isFinite(clamped) ? clamped : minQty
-                })(),
-              }))
-            }
+            inputMode="text"
+            placeholder={selectedService ? String(minQty) : 'Nhập số lượng'}
+            onChange={(e) => {
+              onDraftChange((d) => ({ ...d, quantity: e.target.value }))
+            }}
+            onBlur={() => {
+              if (!selectedService) return
+              const parsed = parseQty(draft.quantity)
+              const clamped = clampQty(parsed)
+              onDraftChange((d) => ({ ...d, quantity: String(clamped) }))
+            }}
             className={inputClass(false)}
           />
           <div className="mt-2 text-xs text-slate-500">{quantityHint}</div>
@@ -258,6 +268,7 @@ export default function OrderForm({
             <button
               type="button"
               onClick={() => {
+                if (isGuest) return onRequireAuth()
                 const errors = validateBeforeSubmit()
                 if (errors.length) {
                   toast({
@@ -268,7 +279,6 @@ export default function OrderForm({
                   })
                   return
                 }
-                if (isGuest) return onRequireAuth()
                 onSubmit()
               }}
               className={[
