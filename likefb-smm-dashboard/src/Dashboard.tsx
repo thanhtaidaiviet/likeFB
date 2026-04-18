@@ -110,7 +110,7 @@ function roundVnd(n: number) {
   return Math.round(n)
 }
 
-function parseQty(text: string) {
+function parseQty(text: string | number) {
   const raw = String(text ?? '')
   const digits = raw.replace(/[^\d]/g, '')
   if (!digits) return NaN
