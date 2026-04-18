@@ -82,37 +82,108 @@ function formatPanelMsg(msg: unknown): string {
   return ''
 }
 
+/** Extra context for common upstream misconfiguration (Vietnamese UI). */
+function augmentSmmUpstreamErrorMessage(text: string): string {
+  const t = text.toLowerCase()
+  if (t.includes('request not found') || t === 'not found' || t.includes('invalid request')) {
+    return `${text} — Kiểm tra SMM_API_URL (domain + /api/v2 hoặc /api/v1), SMM_API_KEY; thử SMM_API_KEY_FIELD=api_key nếu docs dùng tên khác; SMM_API_BODY_FORMAT=json nếu chỉ nhận JSON. (Code đã tự thử lại JSON một lần khi gặp lỗi dạng này.)`
+  }
+  return text
+}
+
 function assertSmmPanelTransportOk(json: unknown): void {
   if (!json || typeof json !== 'object' || Array.isArray(json)) return
   const o = json as Record<string, unknown>
 
   if (o.error != null) {
     const err = String(o.error ?? '').trim()
-    if (err) throw new Error(`SMM_ERROR:${err}`)
+    if (err) throw new Error(`SMM_ERROR:${augmentSmmUpstreamErrorMessage(err)}`)
   }
 
   if (typeof o.status === 'string' && o.status.trim().toLowerCase() === 'error') {
     const text = formatPanelMsg(o.msg)
-    if (text) throw new Error(`SMM_ERROR:${text}`)
+    if (text) throw new Error(`SMM_ERROR:${augmentSmmUpstreamErrorMessage(text)}`)
     throw new Error('SMM_ERROR:UNKNOWN')
   }
 
   if (isPanelErrorStatus(o.status)) {
-    throw new Error(`SMM_ERROR:${formatPanelMsg(o.msg) || 'UNKNOWN'}`)
+    const raw = formatPanelMsg(o.msg) || 'UNKNOWN'
+    throw new Error(`SMM_ERROR:${augmentSmmUpstreamErrorMessage(raw)}`)
   }
 }
 
-async function smmRequest(params: Record<string, string>) {
-  const url = process.env.SMM_API_URL || 'https://smm.com.vn/api/v2'
-  const body = new URLSearchParams(params)
+function smmApiUrlResolved() {
+  return (process.env.SMM_API_URL || 'https://smm.com.vn/api/v2').trim().replace(/\/+$/, '')
+}
+
+function smmApiBodyIsJson() {
+  const v = (process.env.SMM_API_BODY_FORMAT || '').trim().toLowerCase()
+  return v === 'json' || v === 'application/json'
+}
+
+function smmApiBodyDisallowJsonFallback() {
+  const v = (process.env.SMM_API_BODY_FORMAT || '').trim().toLowerCase()
+  return v === 'form' || v === 'urlencoded' || v === 'application/x-www-form-urlencoded'
+}
+
+/** Panels that expect `api_key` / `apikey` instead of `key`. */
+function applySmmKeyFieldOverride(params: Record<string, string>): Record<string, string> {
+  const field = (process.env.SMM_API_KEY_FIELD || 'key').trim() || 'key'
+  if (field === 'key') return { ...params }
+  const out = { ...params }
+  if ('key' in out) {
+    const v = out.key
+    delete out.key
+    out[field] = v
+  }
+  return out
+}
+
+function collectSmmPanelErrorBlob(json: unknown): string {
+  if (!json || typeof json !== 'object' || Array.isArray(json)) return ''
+  const o = json as Record<string, unknown>
+  const parts: string[] = []
+  for (const k of ['msg', 'error', 'message', 'detail', 'description']) {
+    const v = o[k]
+    if (typeof v === 'string') parts.push(v)
+    else if (typeof v === 'number' && Number.isFinite(v)) parts.push(String(v))
+  }
+  return parts.join(' ').toLowerCase()
+}
+
+/** Many gateways return this on form POST when they only accept JSON bodies. */
+function panelMessageHintsWrongTransport(json: unknown): boolean {
+  const t = collectSmmPanelErrorBlob(json)
+  if (!t.trim()) return false
+  return (
+    t.includes('request not found') ||
+    t.includes('invalid request') ||
+    t.includes('incorrect request') ||
+    t.trim() === 'not found'
+  )
+}
+
+async function smmFetchOnce(
+  url: string,
+  params: Record<string, string>,
+  useJson: boolean,
+): Promise<{ res: Response; json: unknown }> {
   const cookie = process.env.SMM_COOKIE
+  const headers: Record<string, string> = {
+    ...(cookie ? { cookie } : {}),
+  }
+  let body: string | URLSearchParams
+  if (useJson) {
+    headers['content-type'] = 'application/json'
+    body = JSON.stringify(params)
+  } else {
+    headers['content-type'] = 'application/x-www-form-urlencoded'
+    body = new URLSearchParams(params)
+  }
 
   const res = await fetch(url, {
     method: 'POST',
-    headers: {
-      'content-type': 'application/x-www-form-urlencoded',
-      ...(cookie ? { cookie } : {}),
-    },
+    headers,
     body,
   })
 
@@ -122,6 +193,23 @@ async function smmRequest(params: Record<string, string>) {
     json = JSON.parse(text)
   } catch {
     throw new Error('SMM_BAD_JSON')
+  }
+  return { res, json }
+}
+
+async function smmRequest(params: Record<string, string>) {
+  const p = applySmmKeyFieldOverride(params)
+  const url = smmApiUrlResolved()
+  const forcedJson = smmApiBodyIsJson()
+
+  let { res, json } = await smmFetchOnce(url, p, forcedJson)
+
+  if (!forcedJson && !smmApiBodyDisallowJsonFallback() && panelMessageHintsWrongTransport(json)) {
+    const second = await smmFetchOnce(url, p, true)
+    if (!panelMessageHintsWrongTransport(second.json)) {
+      json = second.json
+      res = second.res
+    }
   }
 
   assertSmmPanelTransportOk(json)

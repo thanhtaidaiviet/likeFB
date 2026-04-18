@@ -111,23 +111,31 @@ function formatPanelMsg(msg: unknown): string {
   return ''
 }
 
+function augmentSmmUpstreamErrorMessage(text: string): string {
+  const t = text.toLowerCase()
+  if (t.includes('request not found') || t === 'not found' || t.includes('invalid request')) {
+    return `${text} — Kiểm tra SMM_API_URL, SMM_API_KEY, SMM_API_KEY_FIELD=api_key, SMM_API_BODY_FORMAT=json.`
+  }
+  return text
+}
+
 function assertSmmPanelTransportOk(json: unknown): void {
   if (!json || typeof json !== 'object' || Array.isArray(json)) return
   const o = json as Record<string, unknown>
 
   if (o.error != null) {
     const err = String(o.error ?? '').trim()
-    if (err) throw new Error(`SMM_ERROR:${err}`)
+    if (err) throw new Error(`SMM_ERROR:${augmentSmmUpstreamErrorMessage(err)}`)
   }
 
   if (typeof o.status === 'string' && o.status.trim().toLowerCase() === 'error') {
     const text = formatPanelMsg(o.msg)
-    if (text) throw new Error(`SMM_ERROR:${text}`)
+    if (text) throw new Error(`SMM_ERROR:${augmentSmmUpstreamErrorMessage(text)}`)
     throw new Error('SMM_ERROR:UNKNOWN')
   }
 
   if (isPanelErrorStatus(o.status)) {
-    throw new Error(`SMM_ERROR:${formatPanelMsg(o.msg) || 'UNKNOWN'}`)
+    throw new Error(`SMM_ERROR:${augmentSmmUpstreamErrorMessage(formatPanelMsg(o.msg) || 'UNKNOWN')}`)
   }
 }
 
