@@ -16,6 +16,19 @@ export function smmApiKey() {
   return key
 }
 
+/** Some SMM panels wrap the list in an object instead of returning a bare JSON array. */
+export function normalizeSmmServicesPayload(json: unknown): unknown[] {
+  if (Array.isArray(json)) return json
+  if (json && typeof json === 'object') {
+    const o = json as Record<string, unknown>
+    for (const k of ['services', 'data', 'list', 'items', 'result'] as const) {
+      const v = o[k]
+      if (Array.isArray(v)) return v
+    }
+  }
+  throw new Error('SMM_SERVICES_BAD_SHAPE')
+}
+
 export async function smmRequest(params: Record<string, string>) {
   const body = new URLSearchParams(params)
 

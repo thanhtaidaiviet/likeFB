@@ -72,24 +72,6 @@ type FreeLikePlaceResponse = {
   detail?: string
 }
 
-type AdminFreeLikeHistoryResponse = {
-  ok: boolean
-  limit: number
-  offset: number
-  total: number
-  items: {
-    id: string
-    userEmail: string
-    platform: string
-    serviceId: string
-    link: string
-    quantity: number
-    smmOrderId: string | null
-    smmStatus: string | null
-    createdAt: string | null
-  }[]
-}
-
 function pickApiCode(data: any): string | number | null {
   if (!data || typeof data !== 'object') return null
   const candidates = [
@@ -104,6 +86,19 @@ function pickApiCode(data: any): string | number | null {
     if (typeof v === 'number' && Number.isFinite(v)) return v
   }
   return null
+}
+
+/** Upstream may return a bare array or an object like `{ services: [...] }`. */
+export function normalizeSmmServicesJson(data: unknown): SmmRawService[] {
+  if (Array.isArray(data)) return data as SmmRawService[]
+  if (data && typeof data === 'object') {
+    const o = data as Record<string, unknown>
+    for (const k of ['services', 'data', 'list', 'items', 'result'] as const) {
+      const v = o[k]
+      if (Array.isArray(v)) return v as SmmRawService[]
+    }
+  }
+  throw new Error('SMM_SERVICES_BAD_SHAPE')
 }
 
 function formatRequestFailedMessage(opts: {
@@ -197,18 +192,20 @@ async function requestJsonPublic<T>(path: string, init?: RequestInit): Promise<T
 }
 
 export async function apiSmmServices(token: string) {
-  // upstream returns an array; we keep as typed array here
-  return await requestJson<SmmRawService[]>('/api/smm/services', token, { method: 'GET' })
+  const data = await requestJson<unknown>('/api/smm/services', token, { method: 'GET' })
+  return normalizeSmmServicesJson(data)
 }
 
 export async function apiSmmServicesPublic() {
-  return await requestJsonPublic<SmmRawService[]>('/api/smm/services', { method: 'GET' })
+  const data = await requestJsonPublic<unknown>('/api/smm/services', { method: 'GET' })
+  return normalizeSmmServicesJson(data)
 }
 
 // Direct (vercel functions) access when running `vercel dev` for dashboard.
 // Uses the /smm/* prefix to distinguish from your own /api/* backend.
 export async function apiPanelServices(token: string) {
-  return await requestJson<SmmRawService[]>('/smm/services', token, { method: 'GET' })
+  const data = await requestJson<unknown>('/smm/services', token, { method: 'GET' })
+  return normalizeSmmServicesJson(data)
 }
 
 export async function apiFreeLikePlace(
@@ -216,20 +213,6 @@ export async function apiFreeLikePlace(
   body: { platform: string; service: string | number; link: string; quantity: number },
 ) {
   return await requestJson<FreeLikePlaceResponse>('/api/free-like/place', token, {
-    method: 'POST',
-    body: JSON.stringify(body),
-  })
-}
-
-export async function apiAdminFreeLikeHistory(
-  token: string,
-  params?: { limit?: number; offset?: number; platform?: string },
-) {
-  const body: Record<string, unknown> = { action: 'freeLikeHistory' }
-  if (params?.limit != null) body.limit = params.limit
-  if (params?.offset != null) body.offset = params.offset
-  if (params?.platform) body.platform = params.platform
-  return await requestJson<AdminFreeLikeHistoryResponse>('/api/admin', token, {
     method: 'POST',
     body: JSON.stringify(body),
   })

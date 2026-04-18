@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { SmmService } from '../types'
-import { apiAdminFreeLikeHistory, apiOrdersCheckStatus, apiOrdersHistory } from '../api/smm'
+import { apiOrdersCheckStatus, apiOrdersHistory } from '../api/smm'
 
 export default function UserPanel({
   userName,
@@ -41,23 +41,6 @@ export default function UserPanel({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [checkingOrderId, setCheckingOrderId] = useState<string | null>(null)
-  const [freeLikeItems, setFreeLikeItems] = useState<
-    {
-      id: string
-      userEmail: string
-      platform: string
-      serviceId: string
-      link: string
-      quantity: number
-      smmOrderId: string | null
-      smmStatus: string | null
-      createdAt: string | null
-    }[]
-  >([])
-  const [freeLikeTotal, setFreeLikeTotal] = useState(0)
-  const [freeLikeLoading, setFreeLikeLoading] = useState(false)
-  const [freeLikeError, setFreeLikeError] = useState<string | null>(null)
-  const [freeLikePlatform, setFreeLikePlatform] = useState<'All' | 'Facebook' | 'TikTok' | 'Instagram'>('All')
 
   function formatDateTime(iso: string | null) {
     if (!iso) return '—'
@@ -197,39 +180,6 @@ export default function UserPanel({
       cancelled = true
     }
   }, [isAdmin, isAuthed, token, pageSize])
-
-  useEffect(() => {
-    let cancelled = false
-    if (!isAuthed || !token || !isAdmin) {
-      setFreeLikeItems([])
-      setFreeLikeTotal(0)
-      setFreeLikeError(null)
-      return
-    }
-    setFreeLikeLoading(true)
-    setFreeLikeError(null)
-    apiAdminFreeLikeHistory(token, {
-      limit: 20,
-      offset: 0,
-      platform: freeLikePlatform === 'All' ? undefined : freeLikePlatform,
-    })
-      .then((res) => {
-        if (cancelled) return
-        setFreeLikeItems(res.items || [])
-        setFreeLikeTotal(Number(res.total) || 0)
-      })
-      .catch((e: any) => {
-        if (cancelled) return
-        setFreeLikeError(String(e?.message || 'FREE_LIKE_HISTORY_FAILED'))
-      })
-      .finally(() => {
-        if (cancelled) return
-        setFreeLikeLoading(false)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [freeLikePlatform, isAdmin, isAuthed, token])
 
   return (
     <div className="grid gap-4">
@@ -435,109 +385,6 @@ export default function UserPanel({
           </div>
         </div>
       </div>
-
-      {isAdmin ? (
-        <div className="rounded-xl border border-slate-200 bg-white p-4">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <div className="text-sm font-semibold text-slate-900">Tăng like miễn phí (Admin)</div>
-              <div className="mt-1 text-xs text-slate-500">Chỉ admin mới xem được.</div>
-            </div>
-            <div className="grid gap-1">
-              <div className="text-xs font-semibold uppercase tracking-wide text-slate-600">Lọc nền tảng</div>
-              <select
-                value={freeLikePlatform}
-                disabled={!token || freeLikeLoading}
-                onChange={(e) => setFreeLikePlatform(e.target.value as any)}
-                className="h-8 rounded-lg border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-800 shadow-sm outline-none disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {['All', 'Facebook', 'TikTok', 'Instagram'].map((p) => (
-                  <option key={p} value={p}>
-                    {p === 'All' ? 'Tất cả' : p}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          {freeLikeError ? (
-            <div className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-900">
-              Lỗi: {freeLikeError}
-            </div>
-          ) : null}
-
-          <div className="mt-3 overflow-hidden rounded-xl border border-slate-200">
-            <div className="max-h-[320px] overflow-auto overscroll-contain">
-              <table className="min-w-full divide-y divide-slate-200 text-sm">
-                <thead className="sticky top-0 bg-slate-50">
-                  <tr>
-                    <th className="whitespace-nowrap px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
-                      Thời gian
-                    </th>
-                    <th className="whitespace-nowrap px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
-                      User
-                    </th>
-                    <th className="whitespace-nowrap px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
-                      Nền tảng
-                    </th>
-                    <th className="whitespace-nowrap px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
-                      Dịch vụ
-                    </th>
-                    <th className="whitespace-nowrap px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
-                      Liên kết
-                    </th>
-                    <th className="whitespace-nowrap px-3 py-2 text-right text-xs font-semibold uppercase tracking-wide text-slate-600">
-                      Số lượng
-                    </th>
-                    <th className="whitespace-nowrap px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
-                      Mã đơn hàng
-                    </th>
-                    <th className="whitespace-nowrap px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
-                      Trạng thái
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-200 bg-white">
-                  {freeLikeItems.length ? (
-                    freeLikeItems.map((o) => (
-                      <tr key={o.id} className="hover:bg-slate-50">
-                        <td className="whitespace-nowrap px-3 py-2 text-slate-800">{formatDateTime(o.createdAt)}</td>
-                        <td className="px-3 py-2 font-semibold text-slate-900">{o.userEmail}</td>
-                        <td className="px-3 py-2 font-semibold text-slate-900">{o.platform}</td>
-                        <td className="px-3 py-2 font-semibold text-slate-900">{o.serviceId}</td>
-                        <td className="px-3 py-2">
-                          <a
-                            href={o.link}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="line-clamp-1 max-w-[260px] font-semibold text-sky-700 hover:underline"
-                            title={o.link}
-                          >
-                            {o.link}
-                          </a>
-                        </td>
-                        <td className="whitespace-nowrap px-3 py-2 text-right font-semibold text-slate-900">
-                          {o.quantity.toLocaleString('vi-VN')}
-                        </td>
-                        <td className="px-3 py-2 font-semibold text-slate-900">{o.smmOrderId ?? '—'}</td>
-                        <td className="px-3 py-2 text-slate-800">{statusBadge(o.smmStatus)}</td>
-                      </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td className="px-3 py-4 text-center text-slate-600" colSpan={8}>
-                        {freeLikeLoading ? 'Đang tải...' : freeLikeTotal ? 'Không có dữ liệu.' : 'Chưa có giao dịch.'}
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          <div className="mt-2 text-xs text-slate-500">Tổng: {freeLikeTotal.toLocaleString('vi-VN')}</div>
-        </div>
-      ) : null}
     </div>
   )
 }

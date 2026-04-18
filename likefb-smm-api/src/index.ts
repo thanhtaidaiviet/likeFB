@@ -109,6 +109,19 @@ function smmApiKey() {
   return key
 }
 
+/** Some SMM panels return `{ services: [...] }` (or similar) instead of a bare array. */
+function normalizeSmmServicesPayload(json: unknown): SmmServiceRow[] {
+  if (Array.isArray(json)) return json as SmmServiceRow[]
+  if (json && typeof json === 'object') {
+    const o = json as Record<string, unknown>
+    for (const k of ['services', 'data', 'list', 'items', 'result'] as const) {
+      const v = o[k]
+      if (Array.isArray(v)) return v as SmmServiceRow[]
+    }
+  }
+  throw new Error('SMM_SERVICES_BAD_SHAPE')
+}
+
 const MARKUP_MULTIPLIER = 1.5
 
 function toNumber(x: string | number) {
@@ -166,9 +179,8 @@ const SERVICES_CACHE_TTL_MS = 5 * 60 * 1000
 async function getServicesCached() {
   const now = Date.now()
   if (servicesCache && now - servicesCache.atMs < SERVICES_CACHE_TTL_MS) return servicesCache.data
-  const data = (await smmRequest({ key: smmApiKey(), action: 'services' })) as unknown
-  if (!Array.isArray(data)) throw new Error('SMM_SERVICES_BAD_SHAPE')
-  servicesCache = { atMs: now, data: data as SmmServiceRow[] }
+  const data = normalizeSmmServicesPayload(await smmRequest({ key: smmApiKey(), action: 'services' }))
+  servicesCache = { atMs: now, data }
   return servicesCache.data
 }
 
@@ -181,7 +193,7 @@ async function getPanelRateVndPer1k(serviceId: string) {
 
 app.get('/api/smm/services', async (req, res) => {
   try {
-    const data = await smmRequest({ key: smmApiKey(), action: 'services' })
+    const data = normalizeSmmServicesPayload(await smmRequest({ key: smmApiKey(), action: 'services' }))
     return res.json(data)
   } catch (e: any) {
     const msg = e?.message || 'UNKNOWN'
