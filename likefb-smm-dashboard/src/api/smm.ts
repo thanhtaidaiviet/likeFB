@@ -13,8 +13,6 @@ type SmmRawService = {
   dripfeed?: boolean | number | string
 }
 
-type SmmAddResponse = Record<string, unknown>
-type SmmStatusResponse = Record<string, unknown>
 type OrdersPlaceResponse = {
   ok: boolean
   orderId: string
@@ -198,29 +196,8 @@ async function requestJsonPublic<T>(path: string, init?: RequestInit): Promise<T
   return data as T
 }
 
-export async function apiSmmServices(token: string) {
-  // upstream returns an array; we keep as typed array here
-  return await requestJson<SmmRawService[]>('/api/smm/services', token, { method: 'GET' })
-}
-
 export async function apiSmmServicesPublic() {
   return await requestJsonPublic<SmmRawService[]>('/api/smm/services', { method: 'GET' })
-}
-
-// Direct (vercel functions) access when running `vercel dev` for dashboard.
-// Uses the /smm/* prefix to distinguish from your own /api/* backend.
-export async function apiPanelServices(token: string) {
-  return await requestJson<SmmRawService[]>('/smm/services', token, { method: 'GET' })
-}
-
-export async function apiSmmAdd(
-  token: string,
-  body: { service: string | number; link: string; quantity: string | number; comments?: string },
-) {
-  return await requestJson<SmmAddResponse>('/api/smm/add', token, {
-    method: 'POST',
-    body: JSON.stringify(body),
-  })
 }
 
 export async function apiFreeLikePlace(
@@ -247,25 +224,8 @@ export async function apiAdminFreeLikeHistory(
   })
 }
 
-export async function apiSmmStatus(token: string, body: { order: string | number }) {
-  return await requestJson<SmmStatusResponse>('/api/smm/status', token, {
-    method: 'POST',
-    body: JSON.stringify(body),
-  })
-}
-
 export async function apiOrdersCheckStatus(token: string, body: { orderId: string }) {
   return await requestJson<OrdersCheckStatusResponse>('/api/orders/check-status', token, {
-    method: 'POST',
-    body: JSON.stringify(body),
-  })
-}
-
-export async function apiPanelAdd(
-  token: string,
-  body: { service: string | number; link: string; quantity: string | number; comments?: string },
-) {
-  return await requestJson<SmmAddResponse>('/smm/add', token, {
     method: 'POST',
     body: JSON.stringify(body),
   })
