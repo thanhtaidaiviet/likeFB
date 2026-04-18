@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { getPool } from '../_lib/pool.js'
-import { verifyAccessToken } from '../_lib/jwt.js'
-import { bearerToken, onlyMethods, sendJson } from '../_lib/http.js'
+import { getPool } from '../pool.js'
+import { verifyAccessToken } from '../jwt.js'
+import { bearerToken, onlyMethods, sendJson } from '../http.js'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!onlyMethods(req, res, ['GET'])) return
@@ -26,4 +26,3 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return sendJson(res, 401, { error: 'UNAUTHORIZED' })
   }
 }
-

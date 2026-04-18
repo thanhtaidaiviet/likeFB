@@ -1,10 +1,9 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { z } from 'zod'
-import { onlyMethods, readJsonBody, sendJson } from '../_lib/http.js'
-import { requireUser } from '../_lib/auth.js'
-import { smmApiKey, smmRequest } from '../_lib/smm.js'
+import { onlyMethods, readJsonBody, sendJson } from '../http.js'
+import { requireUser } from '../auth.js'
+import { smmApiKey, smmRequest } from '../smm.js'
 
-// Per docs: key, action=add, service, link, quantity, comments (for custom comments)
 const addSchema = z
   .object({
     service: z.union([z.string(), z.number()]),
@@ -48,4 +47,3 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return sendJson(res, 502, { error: 'SMM_UPSTREAM_ERROR', detail: msg })
   }
 }
-

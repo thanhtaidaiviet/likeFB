@@ -1,12 +1,9 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { z } from 'zod'
-import { onlyMethods, readJsonBody, sendJson } from '../_lib/http.js'
-import { requireUser } from '../_lib/auth.js'
-import { smmApiKey, smmRequest } from '../_lib/smm.js'
+import { onlyMethods, readJsonBody, sendJson } from '../http.js'
+import { requireUser } from '../auth.js'
+import { smmApiKey, smmRequest } from '../smm.js'
 
-// Docs:
-// - Create refill: key, action=refill, order
-// - Create multiple refill: key, action=refill, orders (comma-separated)
 const refillSchema = z
   .object({
     order: z.union([z.string(), z.number()]).optional(),
@@ -53,4 +50,3 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return sendJson(res, 502, { error: 'SMM_UPSTREAM_ERROR', detail: msg })
   }
 }
-

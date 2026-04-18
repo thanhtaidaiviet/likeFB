@@ -1,10 +1,10 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { z } from 'zod'
-import { getPool } from '../_lib/pool.js'
-import { verifyPassword } from '../_lib/password.js'
-import { signAccessToken } from '../_lib/jwt.js'
-import { onlyMethods, readJsonBody, sendJson } from '../_lib/http.js'
-import { describeDbError } from '../_lib/db-error.js'
+import { getPool } from '../pool.js'
+import { verifyPassword } from '../password.js'
+import { signAccessToken } from '../jwt.js'
+import { onlyMethods, readJsonBody, sendJson } from '../http.js'
+import { describeDbError } from '../db-error.js'
 
 const ADMIN_EMAIL = 'adminlike@gmail.com'
 
@@ -74,4 +74,3 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return sendJson(res, 500, { error: 'SERVER_ERROR', hint })
   }
 }
-

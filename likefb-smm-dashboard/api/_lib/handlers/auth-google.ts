@@ -2,10 +2,10 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { z } from 'zod'
 import { OAuth2Client } from 'google-auth-library'
 import crypto from 'node:crypto'
-import { getPool } from '../_lib/pool.js'
-import { signAccessToken } from '../_lib/jwt.js'
-import { onlyMethods, readJsonBody, sendJson } from '../_lib/http.js'
-import { describeDbError } from '../_lib/db-error.js'
+import { getPool } from '../pool.js'
+import { signAccessToken } from '../jwt.js'
+import { onlyMethods, readJsonBody, sendJson } from '../http.js'
+import { describeDbError } from '../db-error.js'
 
 const googleLoginSchema = z.object({
   idToken: z.string().min(10),
@@ -83,9 +83,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const hint = describeDbError(err)
     console.error(err)
     if (hint.kind === 'config') return sendJson(res, 500, { error: 'CONFIG_ERROR', hint })
-    // If DB fails, surface as server error (not token error) for easier debugging.
     if (hint.kind !== 'unknown') return sendJson(res, 500, { error: 'SERVER_ERROR', hint })
     return sendJson(res, 401, { error: 'INVALID_GOOGLE_TOKEN', hint })
   }
 }
-

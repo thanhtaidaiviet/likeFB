@@ -1,10 +1,9 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { z } from 'zod'
-import { onlyMethods, readJsonBody, sendJson } from '../_lib/http.js'
-import { requireUser } from '../_lib/auth.js'
-import { smmApiKey, smmRequest } from '../_lib/smm.js'
+import { onlyMethods, readJsonBody, sendJson } from '../http.js'
+import { requireUser } from '../auth.js'
+import { smmApiKey, smmRequest } from '../smm.js'
 
-// Docs: key, action=cancel, orders (comma-separated, up to 100)
 const cancelSchema = z
   .object({
     orders: z.union([z.string().min(1), z.array(z.union([z.string(), z.number()])).min(1)]),
@@ -43,4 +42,3 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return sendJson(res, 502, { error: 'SMM_UPSTREAM_ERROR', detail: msg })
   }
 }
-

@@ -1,12 +1,12 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { z } from 'zod'
-import { onlyMethods, sendJson } from '../_lib/http.js'
-import { requireUser } from '../_lib/auth.js'
-import { smmApiKey, smmRequest } from '../_lib/smm.js'
+import { onlyMethods, sendJson } from '../http.js'
+import { requireUser } from '../auth.js'
+import { smmApiKey, smmRequest } from '../smm.js'
 
 const querySchema = z.object({
-  order: z.string().min(1).optional(),
-  orders: z.string().min(1).optional(),
+  refill: z.string().min(1).optional(),
+  refills: z.string().min(1).optional(),
 })
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -17,14 +17,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const parsed = querySchema.safeParse(req.query)
     if (!parsed.success) return sendJson(res, 400, { error: 'INVALID_INPUT' })
-    const { order, orders } = parsed.data
-    if (!order && !orders) return sendJson(res, 400, { error: 'INVALID_INPUT' })
+    const { refill, refills } = parsed.data
+    if (!refill && !refills) return sendJson(res, 400, { error: 'INVALID_INPUT' })
 
     const data = await smmRequest({
       key: smmApiKey(),
-      action: 'status',
-      ...(order ? { order } : {}),
-      ...(orders ? { orders } : {}),
+      action: 'refill_status',
+      ...(refill ? { refill } : {}),
+      ...(refills ? { refills } : {}),
     })
     return sendJson(res, 200, data)
   } catch (e: unknown) {
@@ -33,4 +33,3 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return sendJson(res, 502, { error: 'SMM_UPSTREAM_ERROR', detail: msg })
   }
 }
-
