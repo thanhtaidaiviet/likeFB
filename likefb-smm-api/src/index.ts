@@ -718,6 +718,8 @@ app.post('/api/orders', async (req, res) => {
         errorCode = String(errorDetail).startsWith('SMM_ERROR:') ? 'SMM_ERROR' : 'SMM_FAILED'
       }
 
+      const initialSmmStatus = smmOrderId ? 'running' : 'Pending'
+
       await client.query(
         `insert into orders
         (id, user_id, smm_service_id, link, quantity, panel_rate_vnd_per_1k, markup_multiplier, sell_total_vnd, smm_order_id, smm_status, error_code, error_detail)
@@ -732,7 +734,7 @@ app.post('/api/orders', async (req, res) => {
           MARKUP_MULTIPLIER,
           sellTotalVnd,
           smmOrderId,
-          'Pending',
+          initialSmmStatus,
           errorCode,
           errorDetail,
         ],
@@ -961,6 +963,7 @@ app.post('/api/free-like/place', async (req, res) => {
     }
 
     const id = crypto.randomUUID()
+    const initialSmmStatus = smmOrderId ? 'running' : 'Pending'
     await client.query('begin')
     await client.query(
       `insert into free_like_orders
@@ -974,7 +977,7 @@ app.post('/api/free-like/place', async (req, res) => {
         link,
         qty,
         smmOrderId,
-        'Pending',
+        initialSmmStatus,
         errorCode,
         errorDetail,
       ],

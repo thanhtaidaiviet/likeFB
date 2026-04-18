@@ -1,11 +1,19 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import Header from './components/Header'
+import MainNavPanel from './components/MainNavPanel'
 import OrderForm, { type OrderDraft } from './components/OrderForm'
-import Sidebar, { type NavItem } from './components/Sidebar'
+
 import TopupModal from './components/TopupModal'
 import UserPanel from './components/UserPanel'
 import { useAuth } from './auth/AuthContext'
-import { apiAdminTopup, apiFreeLikePlace, apiOrdersPlace, apiSmmServicesPublic } from './api/smm'
+import { apiAdminTopup, apiFreeLikePlace, apiOrdersHistory, apiOrdersPlace, apiSmmServicesPublic } from './api/smm'
 import { SERVICE_OVERRIDES } from './servicesOverrides'
 import { useToast } from './ui/toast'
 
@@ -118,7 +126,28 @@ const ADMIN_EMAIL = 'adminlike@gmail.com'
 export default function Dashboard() {
   const { status, user, token, logout, openLogin } = useAuth()
   const { toast } = useToast()
-  const [activeNav, setActiveNav] = useState<Platform>('')
+  const [navMenuOpen, setNavMenuOpen] = useState(false)
+
+  useLayoutEffect(() => {
+    const syncDesktopDefault = () => setNavMenuOpen(window.innerWidth >= 640)
+    syncDesktopDefault()
+    const id = window.requestAnimationFrame(() => {
+      syncDesktopDefault()
+    })
+    return () => window.cancelAnimationFrame(id)
+  }, [])
+
+  useEffect(() => {
+    if (!navMenuOpen) return
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setNavMenuOpen(false)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [navMenuOpen])
+  const [supportNavOpen, setSupportNavOpen] = useState(false)
+  const [lang, setLang] = useState<'vi' | 'en'>('vi')
+  const [darkMode, setDarkMode] = useState(false)
   const [balanceVnd, setBalanceVnd] = useState<number>(0)
   const [services, setServices] = useState<SmmService[]>([])
   const [servicesError, setServicesError] = useState<string | null>(null)
@@ -140,6 +169,11 @@ export default function Dashboard() {
   const adminTopupEmailInputRef = useRef<HTMLInputElement | null>(null)
 
   const [placingOrder, setPlacingOrder] = useState(false)
+  const orderSectionRef = useRef<HTMLDivElement | null>(null)
+  const [kpiLoading, setKpiLoading] = useState(false)
+  const [kpiTotalOrders, setKpiTotalOrders] = useState(0)
+  const [kpiTotalSpendVnd, setKpiTotalSpendVnd] = useState(0)
+  const [kpiProcessing, setKpiProcessing] = useState(0)
 
   const [draft, setDraft] = useState<OrderDraft>({
     search: '',
@@ -150,6 +184,42 @@ export default function Dashboard() {
     quantity: 1000,
     comments: '',
   })
+
+  useEffect(() => {
+    try {
+      const savedLang = String(localStorage.getItem('likefb_lang') || '')
+      if (savedLang === 'en' || savedLang === 'vi') setLang(savedLang)
+      const savedTheme = String(localStorage.getItem('likefb_theme') || '')
+      if (savedTheme === 'dark') setDarkMode(true)
+      if (savedTheme === 'light') setDarkMode(false)
+      if (!savedTheme) {
+        const prefersDark = typeof window !== 'undefined' && window.matchMedia?.('(prefers-color-scheme: dark)')?.matches
+        setDarkMode(Boolean(prefersDark))
+      }
+    } catch {
+      // ignore
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('likefb_lang', lang)
+    } catch {
+      // ignore
+    }
+  }, [lang])
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('likefb_theme', darkMode ? 'dark' : 'light')
+    } catch {
+      // ignore
+    }
+    const root = document.documentElement
+    if (darkMode) root.classList.add('dark')
+    else root.classList.remove('dark')
+  }, [darkMode])
 
   useEffect(() => {
     let cancelled = false
@@ -214,11 +284,65 @@ export default function Dashboard() {
     setBalanceVnd(user?.balanceVnd ?? 0)
   }, [status, user?.balanceVnd])
 
+  useEffect(() => {
+    let cancelled = false
+    if (status !== 'authed' || !token) {
+      setKpiTotalOrders(0)
+      setKpiTotalSpendVnd(0)
+      setKpiProcessing(0)
+      setKpiLoading(false)
+      return
+    }
+
+    const PROCESSING = new Set(['running', 'processing', 'in progress', 'inprogress'])
+    const REFUNDED = new Set(['refunded'])
+
+    ;(async () => {
+      setKpiLoading(true)
+      try {
+        const limit = 50
+        let offset = 0
+        let total = 0
+        let spend = 0
+        let processing = 0
+
+        for (let guard = 0; guard < 300; guard++) {
+          const res = await apiOrdersHistory(token, { limit, offset })
+          if (cancelled) return
+          total = Number(res.total) || 0
+
+          for (const o of res.orders || []) {
+            const smmOrderId = (o as any).smmOrderId as string | null
+            const smmStatus = String((o as any).smmStatus || '').trim().toLowerCase()
+            const isPlaced = Boolean(smmOrderId) && !REFUNDED.has(smmStatus)
+            if (isPlaced) spend += Number((o as any).totalVnd) || 0
+            if (PROCESSING.has(smmStatus)) processing += 1
+          }
+
+          offset += limit
+          if (offset >= total) break
+          if (!res.orders || res.orders.length === 0) break
+        }
+
+        setKpiTotalOrders(total)
+        setKpiTotalSpendVnd(Math.max(0, Math.round(spend)))
+        setKpiProcessing(processing)
+      } catch {
+        // keep KPI as-is on error
+      } finally {
+        if (!cancelled) setKpiLoading(false)
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [status, token])
+
   // Initialize active platform + draft when services are first loaded.
   useEffect(() => {
     if (!services.length) return
     const firstPlatform = services[0].platform
-    setActiveNav((cur) => (cur ? cur : firstPlatform))
     setFreePlatform((cur) => {
       if (cur) return cur
       const allowed = ['Facebook', 'TikTok', 'Instagram'] as Platform[]
@@ -350,10 +474,7 @@ export default function Dashboard() {
     setFreeQty(freeServiceForPlatform.min)
   }, [freeServiceForPlatform])
 
-  const navItems = useMemo<NavItem[]>(
-    () => availablePlatforms.map((p) => ({ label: p, value: p })),
-    [availablePlatforms],
-  )
+  // Sidebar removed.
 
   useEffect(() => {
     if (!availableCategories.length) return
@@ -391,18 +512,6 @@ export default function Dashboard() {
     if (totalVnd > balanceVnd) return false
     return true
   }, [balanceVnd, draft.quantity, draft.targetLink, selectedService, totalVnd])
-
-  function handleNavChange(next: Platform) {
-    setActiveNav(next)
-    setDraft((d) => ({
-      ...d,
-      platform: next,
-      category: 'All',
-      serviceId: '',
-      search: '',
-      comments: '',
-    }))
-  }
 
   async function handleSubmit() {
     if (!selectedService) return
@@ -497,6 +606,66 @@ export default function Dashboard() {
 
   const isAdmin = status === 'authed' && String(user?.email || '').toLowerCase() === ADMIN_EMAIL
 
+  const navMenuItems = useMemo(() => {
+    const vi = [
+      { key: 'overview' as const, label: 'Tổng quan' },
+      { key: 'newOrder' as const, label: 'Đặt đơn mới' },
+      { key: 'history' as const, label: 'Lịch sử đơn hàng' },
+      { key: 'topup' as const, label: 'Nạp tiền' },
+      { key: 'support' as const, label: 'Hỗ trợ' },
+    ]
+    const en = [
+      { key: 'overview' as const, label: 'Overview' },
+      { key: 'newOrder' as const, label: 'New order' },
+      { key: 'history' as const, label: 'Order history' },
+      { key: 'topup' as const, label: 'Top up' },
+      { key: 'support' as const, label: 'Support' },
+    ]
+    return lang === 'en' ? en : vi
+  }, [lang])
+
+  const supportTelegramUrl = useMemo(() => {
+    const u = import.meta.env.VITE_TELEGRAM_SUPPORT_URL as string | undefined
+    if (u) return u
+    const username = import.meta.env.VITE_TELEGRAM_SUPPORT_USERNAME as string | undefined
+    return username ? `https://t.me/${username}` : 'https://t.me/'
+  }, [])
+
+  const supportZaloUrl = useMemo(
+    () => (import.meta.env.VITE_ZALO_SUPPORT_URL as string | undefined) || 'https://zalo.me/',
+    [],
+  )
+
+  const handleMainNav = useCallback(
+    (key: (typeof navMenuItems)[number]['key']) => {
+      if (key === 'support') {
+        setSupportNavOpen((o) => !o)
+        return
+      }
+      setSupportNavOpen(false)
+      if (key === 'overview') window.scrollTo({ top: 0, behavior: 'smooth' })
+      if (key === 'newOrder') orderSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      if (key === 'history') {
+        const el = document.getElementById('order-history')
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }
+      if (key === 'topup') {
+        if (status !== 'authed') {
+          openLogin()
+          if (typeof window !== 'undefined' && window.matchMedia('(max-width: 639px)').matches) {
+            setNavMenuOpen(false)
+          }
+          return
+        }
+        setTopupOpen(true)
+      }
+      if (typeof window !== 'undefined' && window.matchMedia('(max-width: 639px)').matches) {
+        setNavMenuOpen(false)
+      }
+    },
+    [openLogin, orderSectionRef, status],
+  )
+
   const adminTopupEmailTrimmed = adminTopupEmail.trim().toLowerCase()
   const adminTopupEmailValid = Boolean(adminTopupEmailTrimmed) && adminTopupEmailTrimmed.includes('@')
 
@@ -553,40 +722,145 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="min-h-full bg-slate-50 text-slate-900">
-      <div className="grid min-h-screen grid-cols-1 lg:grid-cols-[260px_1fr_340px]">
-        <aside className="hidden border-r border-slate-200 bg-white lg:block">
-          <Sidebar
-            items={navItems}
-            activeValue={activeNav}
-            onChange={(v) => handleNavChange(v as Platform)}
-          />
-        </aside>
+    <div className="flex min-h-screen flex-col bg-[#eef2f7] text-slate-900 dark:bg-slate-900 dark:text-slate-100">
+      <div className="sticky top-0 z-40 border-b border-slate-200 bg-white/90 backdrop-blur dark:border-slate-700 dark:bg-slate-900/90">
+        <Header
+          userName={user?.email ?? 'user'}
+          isAuthed={status === 'authed'}
+          menuOpen={navMenuOpen}
+          onMenuClick={() => setNavMenuOpen((v) => !v)}
+          onLoginClick={openLogin}
+          onLogoutClick={logout}
+          lang={lang}
+          onLangChange={setLang}
+          darkMode={darkMode}
+          onToggleDarkMode={() => setDarkMode((v) => !v)}
+        />
+      </div>
 
-        <div className="min-w-0">
-          <Header
-            userName={user?.email ?? 'user'}
-            isAuthed={status === 'authed'}
-            onTopupClick={() => {
-              if (status !== 'authed') return openLogin()
-              setTopupOpen(true)
-            }}
-            onLoginClick={openLogin}
-            onLogoutClick={logout}
+      <div className="relative flex min-h-0 flex-1 flex-row overflow-hidden">
+        {navMenuOpen ? (
+          <button
+            type="button"
+            className="fixed inset-0 z-[29] cursor-default bg-slate-900/40 sm:hidden"
+            onClick={() => setNavMenuOpen(false)}
+            aria-label="Đóng menu"
           />
+        ) : null}
+        {navMenuOpen ? (
+          <aside className="flex min-h-0 w-[min(280px,85vw)] flex-col border-r border-slate-200/80 bg-white/95 dark:border-slate-700 dark:bg-slate-900/95 max-sm:fixed max-sm:bottom-0 max-sm:left-0 max-sm:top-14 max-sm:z-30 max-sm:shadow-xl sm:relative sm:z-auto sm:w-[280px] sm:shrink-0 sm:shadow-[4px_0_24px_-12px_rgba(15,23,42,0.08)]">
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3 sm:max-h-[calc(100vh-4rem)] sm:py-4">
+              <MainNavPanel
+                navMenuItems={navMenuItems}
+                supportNavOpen={supportNavOpen}
+                supportTelegramUrl={supportTelegramUrl}
+                supportZaloUrl={supportZaloUrl}
+                onNavKey={(key) => handleMainNav(key)}
+                ariaLabel="Điều hướng chính"
+              />
+            </div>
+          </aside>
+        ) : null}
 
-          <main className="px-4 py-6 sm:px-6">
-            <div className="grid gap-4">
-              <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-rose-900">
+        <main className="min-h-0 min-w-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
+          <div className="mx-auto w-full max-w-[min(100%,88rem)] space-y-5">
+                <div className="grid gap-4 lg:grid-cols-[1.6fr_1fr]">
+                <div className="rounded-2xl border border-slate-200 bg-gradient-to-br from-violet-600 via-indigo-600 to-fuchsia-600 p-5 text-white shadow-sm dark:border-slate-800">
+                  <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-white/80">
+                    <span className="rounded-full bg-white/15 px-2 py-0.5">Chào mừng</span>
+                    <span className="rounded-full bg-white/15 px-2 py-0.5">Starter</span>
+                  </div>
+                  <div className="mt-3 text-2xl font-extrabold leading-tight">
+                    Chào {status === 'authed' ? (user?.email?.split('@')[0] ?? 'bạn') : 'bạn'}, sẵn sàng bứt phá chưa?
+                  </div>
+                  <div className="mt-2 max-w-2xl text-sm text-white/85">
+                    {lang === 'en'
+                      ? 'Boost likes today, close orders tomorrow. Turn every interaction into customers.'
+                      : 'Tăng like hôm nay, chốt đơn ngày mai. Biến mọi tương tác thành khách hàng.'}
+                  </div>
+                  <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+                    <button
+                      type="button"
+                      onClick={() => orderSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+                      className="inline-flex h-10 items-center justify-center rounded-lg bg-white px-4 text-sm font-semibold text-slate-900 shadow-sm hover:bg-white/90"
+                    >
+                      Đặt đơn mới
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (status !== 'authed') return openLogin()
+                        setTopupOpen(true)
+                      }}
+                      className="inline-flex h-10 items-center justify-center rounded-lg border border-white/30 bg-white/10 px-4 text-sm font-semibold text-white hover:bg-white/15"
+                    >
+                      Nạp tiền
+                    </button>
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+                  <div className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                    Số dư ví
+                  </div>
+                  <div className="mt-1 flex items-end justify-between gap-3">
+                    <div className="text-3xl font-extrabold text-slate-900 dark:text-slate-50">{formatVnd(balanceVnd)}</div>
+                    <div className="rounded-xl bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600 ring-1 ring-inset ring-slate-200 dark:bg-slate-800/80 dark:text-slate-200 dark:ring-slate-600">
+                      {status === 'authed' ? 'Có thể dùng cho đơn hàng' : 'Đăng nhập để xem'}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-3">
+                <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+                  <div className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                    Tổng đơn hàng
+                  </div>
+                  <div className="mt-1 text-2xl font-extrabold text-slate-900 dark:text-slate-50">
+                    {kpiLoading ? '—' : kpiTotalOrders.toLocaleString('vi-VN')}
+                  </div>
+                  <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">Từ trước đến nay</div>
+                </div>
+                <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+                  <div className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                    Tổng chi tiêu
+                  </div>
+                  <div className="mt-1 text-2xl font-extrabold text-slate-900 dark:text-slate-50">
+                    {kpiLoading ? '—' : formatVnd(kpiTotalSpendVnd)}
+                  </div>
+                  <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">Toàn thời gian</div>
+                </div>
+                <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+                  <div className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                    Đang xử lý
+                  </div>
+                  <div className="mt-1 text-2xl font-extrabold text-slate-900 dark:text-slate-50">
+                    {kpiLoading ? '—' : kpiProcessing.toLocaleString('vi-VN')}
+                  </div>
+                  <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">Đơn đang chạy</div>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-rose-900 dark:border-rose-500/35 dark:bg-rose-950/70 dark:text-rose-50">
                 <div className="flex items-start gap-3">
-                  <div className="mt-0.5 grid size-9 place-items-center rounded-lg bg-rose-600 text-white">
+                  <div className="mt-0.5 grid size-9 place-items-center rounded-lg bg-rose-600 text-white dark:bg-rose-500">
                     !
                   </div>
                   <div className="min-w-0">
-                    <div className="font-semibold">Thông báo quan trọng</div>
-                    <div className="mt-1 text-sm text-rose-800">
+                    <div className="font-semibold text-rose-950 dark:text-rose-50">Thông báo quan trọng</div>
+                    <div className="mt-1 text-sm text-rose-900 dark:text-rose-100">
                       Vui lòng kiểm tra kỹ link, số lượng và chọn đúng dịch vụ. Đơn sai link
                       không hoàn tiền.
+                    </div>
+                    <div className="mt-2 text-[11px] leading-tight text-rose-900/95 dark:text-rose-200">
+                      <div className="font-semibold">Không cài đè đơn hàng:</div>
+                      <div>
+                        Vui lòng chờ đơn hàng hiện tại hoàn tất trước khi cài đơn mới. Việc cài đè có thể gây xung đột
+                        tài nguyên và dẫn đến lỗi thiếu số lượng.
+                      </div>
+                      <div className="mt-1 font-semibold">Chính sách bảo hành:</div>
+                      <div>Chúng tôi không bảo hành các trường hợp cài đè đơn hàng.</div>
                     </div>
                   </div>
                 </div>
@@ -596,12 +870,12 @@ export default function Dashboard() {
                 <button
                   type="button"
                   onClick={() => setAdminTopupOpen(true)}
-                  className="w-full rounded-xl border border-indigo-200 bg-indigo-50 p-4 text-left text-indigo-950 transition hover:bg-indigo-100/60"
+                  className="w-full rounded-xl border border-indigo-200 bg-indigo-50 p-4 text-left text-indigo-950 transition hover:bg-indigo-100/60 dark:border-indigo-500/35 dark:bg-indigo-950/50 dark:text-indigo-50 dark:hover:bg-indigo-950/70"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <div className="font-semibold">Admin: Nạp tiền user</div>
-                      <div className="mt-1 text-sm text-indigo-800">
+                      <div className="mt-1 text-sm text-indigo-800 dark:text-indigo-200">
                         Nhập email user và số tiền cần cộng vào balance.
                       </div>
                     </div>
@@ -609,35 +883,21 @@ export default function Dashboard() {
                 </button>
               ) : null}
 
-              <button
-                type="button"
-                onClick={() => {
-                  setFreeLikeOpen(true)
-                }}
-                className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-left text-emerald-950 transition hover:bg-emerald-100/60"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="font-semibold">Tăng like miễn phí</div>
-                  </div>
-                </div>
-              </button>
-
-              <div className="rounded-xl border border-slate-200 bg-white">
-                <div className="border-b border-slate-200 px-4 py-3 sm:px-6">
-                  <div className="text-base font-semibold">Đặt dịch vụ SMM</div>
-                  <div className="mt-1 text-sm text-slate-600">
+              <div ref={orderSectionRef} className="rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
+                <div className="border-b border-slate-200 px-4 py-3 sm:px-6 dark:border-slate-700">
+                  <div className="text-base font-semibold text-slate-900 dark:text-slate-50">Đặt dịch vụ SMM</div>
+                  <div className="mt-1 text-sm text-slate-600 dark:text-slate-300">
                     Chọn nền tảng, phân loại và dịch vụ phù hợp.
                   </div>
                 </div>
                 <div className="p-4 sm:p-6">
                   {servicesLoading ? (
-                    <div className="mb-4 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+                    <div className="mb-4 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-200">
                       Đang tải danh sách dịch vụ...
                     </div>
                   ) : null}
                   {servicesError ? (
-                    <div className="mb-4 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-900">
+                    <div className="mb-4 rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-sm text-rose-950 dark:border-rose-500/40 dark:bg-rose-950/50 dark:text-rose-100">
                       Không tải được services: {servicesError}
                     </div>
                   ) : null}
@@ -658,24 +918,18 @@ export default function Dashboard() {
                   />
                 </div>
               </div>
-            </div>
-          </main>
-        </div>
 
-        <aside className="border-t border-slate-200 bg-white lg:border-l lg:border-t-0">
-          <div className="px-4 py-6 sm:px-6 lg:px-5">
-            <UserPanel
-              userName={status === 'authed' ? user?.email ?? 'user' : 'guest'}
-              userId={status === 'authed' ? user?.id ?? '—' : '—'}
-              balanceVnd={balanceVnd}
-              formatVnd={formatVnd}
-              service={selectedService}
-              token={token}
-              isAuthed={status === 'authed'}
-              isAdmin={isAdmin}
-            />
+              <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6 dark:border-slate-700 dark:bg-slate-900">
+                <UserPanel
+                  userId={status === 'authed' ? user?.id ?? '—' : '—'}
+                  formatVnd={formatVnd}
+                  token={token}
+                  isAuthed={status === 'authed'}
+                  isAdmin={isAdmin}
+                />
+              </div>
           </div>
-        </aside>
+        </main>
       </div>
 
       <TopupModal
@@ -683,43 +937,6 @@ export default function Dashboard() {
         onClose={() => setTopupOpen(false)}
         userEmail={status === 'authed' ? user?.email : undefined}
       />
-
-      <div className="fixed bottom-6 right-6 z-[54] flex flex-col gap-3">
-        <a
-          href={
-            (import.meta.env.VITE_TELEGRAM_SUPPORT_URL as string | undefined)
-              ? (import.meta.env.VITE_TELEGRAM_SUPPORT_URL as string)
-              : (import.meta.env.VITE_TELEGRAM_SUPPORT_USERNAME as string | undefined)
-                ? `https://t.me/${import.meta.env.VITE_TELEGRAM_SUPPORT_USERNAME as string}`
-                : 'https://t.me/'
-          }
-          target="_blank"
-          rel="noreferrer"
-          className="group inline-flex size-12 items-center justify-center rounded-full bg-sky-600 text-white shadow-lg ring-1 ring-black/5 transition hover:bg-sky-700"
-          aria-label="Hỗ trợ Telegram"
-          title="Telegram"
-        >
-          <svg
-            viewBox="0 0 24 24"
-            className="size-6"
-            fill="currentColor"
-            aria-hidden="true"
-          >
-            <path d="M21.8 3.6c-.3-.3-.7-.4-1.2-.2L2.9 10.2c-.5.2-.8.6-.8 1.1 0 .5.3.9.8 1.1l4.6 1.6 1.7 5.3c.1.4.5.7.9.8.4.1.9 0 1.2-.3l2.6-2.5 4.9 3.6c.3.2.7.3 1.1.2.4-.1.7-.4.8-.8l3.4-16.1c.1-.4 0-.8-.3-1.1zM9.8 18.2l-1.2-3.8 8.9-8.2-10.9 7.2-3.8-1.3 14.7-5.7-2.9 13.8-4.7-3.4c-.4-.3-1-.3-1.3.1l-1.8 1.3z" />
-          </svg>
-        </a>
-
-        <a
-          href={(import.meta.env.VITE_ZALO_SUPPORT_URL as string | undefined) || 'https://zalo.me/'}
-          target="_blank"
-          rel="noreferrer"
-          className="group inline-flex size-12 items-center justify-center rounded-full bg-blue-600 text-white shadow-lg ring-1 ring-black/5 transition hover:bg-blue-700"
-          aria-label="Hỗ trợ Zalo"
-          title="Zalo"
-        >
-          <span className="text-sm font-extrabold">Z</span>
-        </a>
-      </div>
 
       {freeLikeOpen ? (
         <div className="fixed inset-0 z-[45]">

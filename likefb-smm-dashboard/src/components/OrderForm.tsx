@@ -14,7 +14,7 @@ export type OrderDraft = {
 
 function fieldLabel(s: string) {
   return (
-    <div className="text-xs font-semibold uppercase tracking-wide text-slate-600">
+    <div className="text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-400">
       {s}
     </div>
   )
@@ -24,8 +24,8 @@ function inputClass(disabled?: boolean) {
   return [
     'mt-1 h-10 w-full rounded-lg border bg-white px-3 text-sm shadow-sm outline-none transition focus:ring-2',
     disabled
-      ? 'cursor-not-allowed border-slate-200 bg-slate-50 text-slate-500'
-      : 'border-slate-200 text-slate-900 focus:ring-indigo-500',
+      ? 'cursor-not-allowed border-slate-200 bg-slate-50 text-slate-500 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-400'
+      : 'border-slate-200 text-slate-900 focus:ring-indigo-500 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100',
   ].join(' ')
 }
 
@@ -214,7 +214,7 @@ export default function OrderForm({
               </option>
             ))}
           </select>
-          <div className="mt-2 text-xs text-slate-500">
+          <div className="mt-2 text-xs text-slate-500 dark:text-slate-400">
             {selectedService ? null : 'Chọn dịch vụ để xem chi tiết.'}
           </div>
         </div>
@@ -229,7 +229,7 @@ export default function OrderForm({
             placeholder="https://..."
             className={inputClass(false)}
           />
-          <div className="mt-2 text-xs text-slate-500">
+          <div className="mt-2 text-xs text-slate-500 dark:text-slate-400">
             Hỗ trợ link bài viết, profile, video tùy dịch vụ.
           </div>
         </div>
@@ -250,10 +250,10 @@ export default function OrderForm({
               }}
               placeholder={'Mỗi dòng là 1 comment...\nVí dụ:\nNice!\nGreat post!'}
               className={[
-                'mt-1 min-h-[110px] w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm outline-none focus:ring-2 focus:ring-indigo-500',
+                'mt-1 min-h-[110px] w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm outline-none focus:ring-2 focus:ring-indigo-500 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100',
               ].join(' ')}
             />
-            <div className="mt-2 text-xs text-slate-500">
+            <div className="mt-2 text-xs text-slate-500 dark:text-slate-400">
               Mỗi dòng là một comment.
               {selectedService ? (
                 <>
@@ -291,7 +291,7 @@ export default function OrderForm({
             }
             className={inputClass(false)}
           />
-          <div className="mt-2 text-xs text-slate-500">
+          <div className="mt-2 text-xs text-slate-500 dark:text-slate-400">
             {needsComments
               ? `Tự động theo số dòng bình luận: ${commentLineCount.toLocaleString(
                   'vi-VN',
@@ -300,16 +300,16 @@ export default function OrderForm({
           </div>
         </div>
 
-        <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 md:col-span-2">
+        <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 md:col-span-2 dark:border-slate-700 dark:bg-slate-900/70">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <div className="text-xs font-semibold uppercase tracking-wide text-slate-600">
+              <div className="text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-400">
                 Tổng tiền (tự động)
               </div>
-              <div className="mt-1 text-2xl font-extrabold text-slate-900">
+              <div className="mt-1 text-2xl font-extrabold text-slate-900 dark:text-slate-50">
                 {formatVnd(totalVnd)}
               </div>
-              <div className="mt-1 text-xs text-slate-500">
+              <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
                 {selectedService ? (
                   <>
                     Công thức: (Số lượng / 1000) × {formatVnd(selectedService.rateVndPer1k)}
@@ -359,7 +359,7 @@ export default function OrderForm({
             </button>
           </div>
           {!canSubmit ? (
-            <div className="mt-3 text-xs text-slate-600">
+            <div className="mt-3 text-xs text-slate-600 dark:text-slate-300">
               Gợi ý: chọn dịch vụ, nhập link, kiểm tra min/max và đảm bảo số dư đủ.
             </div>
           ) : null}

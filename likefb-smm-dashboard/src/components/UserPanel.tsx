@@ -1,22 +1,15 @@
 import { useEffect, useState } from 'react'
-import type { SmmService } from '../types'
 import { apiOrdersCheckStatus, apiOrdersHistory } from '../api/smm'
 
 export default function UserPanel({
-  userName,
   userId: _userId,
-  balanceVnd,
   formatVnd,
-  service,
   token,
   isAuthed,
   isAdmin,
 }: {
-  userName: string
   userId: string
-  balanceVnd: number
   formatVnd: (n: number) => string
-  service: SmmService | null
   token?: string | null
   isAuthed: boolean
   isAdmin: boolean
@@ -56,7 +49,11 @@ export default function UserPanel({
     }
 
     const norm = s.toLowerCase()
-    const isRunning = norm === 'in progress' || norm === 'inprogress'
+    const isRunning =
+      norm === 'running' ||
+      norm === 'processing' ||
+      norm === 'in progress' ||
+      norm === 'inprogress'
     if (isRunning) {
       return (
         <span className="inline-flex items-center rounded-full bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-800 ring-1 ring-inset ring-amber-200">
@@ -183,64 +180,11 @@ export default function UserPanel({
 
   return (
     <div className="grid gap-4">
-      <div className="rounded-xl border border-slate-200 bg-white p-4">
+      <div id="order-history" className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900">
         <div className="flex items-center justify-between gap-3">
-          <div className="min-w-0">
-            <div className="break-words text-sm font-semibold text-slate-900">
-              {userName}
-            </div>
-          </div>
-          <div className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 ring-1 ring-inset ring-emerald-200">
-            Online
-          </div>
-        </div>
-
-        <div className="mt-4 rounded-xl bg-slate-50 p-4">
-          <div className="text-xs font-semibold uppercase tracking-wide text-slate-600">
-            Số dư
-          </div>
-          <div className="mt-1 text-2xl font-extrabold text-slate-900">
-            {formatVnd(balanceVnd)}
-          </div>
-          <div className="mt-2 text-xs text-slate-500">
-            Số dư tự trừ sau khi đặt hàng.
-          </div>
-        </div>
-      </div>
-
-      <div className="rounded-xl border border-slate-200 bg-white p-4">
-        <div className="text-sm font-semibold text-slate-900">
-          Thông tin dịch vụ
-        </div>
-        <div className="mt-3 grid gap-3 text-sm">
-          <Row label="Trạng thái" value={service ? 'Đã chọn' : 'Chưa chọn'} />
-          <Row label="Service ID" value={service?.id ?? '-'} />
-          <Row label="Giá / 1k" value={service ? formatVnd(service.rateVndPer1k) : '-'} />
-          <Row label="Min" value={service ? service.min.toLocaleString('vi-VN') : '-'} />
-          <Row label="Max" value={service ? service.max.toLocaleString('vi-VN') : '-'} />
-          <Row label="Hoàn thành" value={service?.avgCompletion ?? '-'} />
-
-          <div className="grid grid-cols-[110px_1fr] items-start gap-3">
-            <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Mô tả</div>
-            <div className="min-w-0 text-sm font-semibold text-slate-800">
-              {service?.desc ? (
-                <div
-                  className="break-words whitespace-normal [&_p]:m-0"
-                  dangerouslySetInnerHTML={{ __html: service.desc }}
-                />
-              ) : (
-                '-'
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="rounded-xl border border-slate-200 bg-white p-4">
-        <div className="flex items-center justify-between gap-3">
-          <div className="text-sm font-semibold text-slate-900">Lịch sử đặt hàng</div>
+          <div className="text-sm font-semibold text-slate-900 dark:text-slate-100">Lịch sử đặt hàng</div>
           <div className="flex items-center gap-2">
-            <div className="text-xs font-semibold text-slate-600">Hiển thị:</div>
+            <div className="hidden text-xs font-semibold text-slate-600 sm:block dark:text-slate-300">Hiển thị:</div>
             <select
               value={pageSize}
               disabled={!isAuthed || !token || loading}
@@ -250,7 +194,7 @@ export default function UserPanel({
                 setPageSize(v)
                 setPage(1)
               }}
-              className="h-8 rounded-lg border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-800 shadow-sm outline-none disabled:cursor-not-allowed disabled:opacity-60"
+              className="h-9 rounded-lg border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-800 shadow-sm outline-none disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100"
             >
               {[5, 10, 20, 50].map((n) => (
                 <option key={n} value={n}>
@@ -262,17 +206,104 @@ export default function UserPanel({
         </div>
 
         {!isAuthed ? (
-          <div className="mt-2 text-sm text-slate-600">Đăng nhập để xem lịch sử.</div>
+          <div className="mt-2 text-sm text-slate-600 dark:text-slate-300">Đăng nhập để xem lịch sử.</div>
         ) : error ? (
           <div className="mt-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-900">
             Lỗi: {error}
           </div>
         ) : null}
 
-        <div className="mt-3 overflow-hidden rounded-xl border border-slate-200">
-          <div className="max-h-[320px] overflow-auto overscroll-contain">
+        {/* Mobile: card list (easier to tap) */}
+        <div className="mt-3 grid gap-2 sm:hidden">
+          {orders.length ? (
+            orders.map((o) => {
+              const isRefunded =
+                Boolean(o.refundedAt) || (o.smmStatus != null && String(o.smmStatus).trim().toLowerCase() === 'refunded')
+              return (
+                <div
+                  key={o.id}
+                  className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-800 dark:bg-slate-950"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="font-semibold text-slate-900 dark:text-slate-100">
+                        Service {o.serviceId}
+                      </div>
+                      <div className="mt-0.5 text-[10px] leading-tight text-slate-500 dark:text-slate-400">
+                        {formatDateTime(o.createdAt)}
+                      </div>
+                    </div>
+                    <div className="shrink-0">{statusBadge(o.smmStatus)}</div>
+                  </div>
+
+                  <a
+                    href={o.link}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-2 block break-all text-sm font-semibold text-sky-700 underline-offset-2 hover:underline dark:text-sky-300"
+                    title={o.link}
+                  >
+                    {o.link}
+                  </a>
+
+                  <div className="mt-2 grid grid-cols-2 gap-2 text-sm">
+                    <div className="rounded-lg bg-slate-50 p-2 ring-1 ring-inset ring-slate-200 dark:bg-slate-900/40 dark:ring-slate-800">
+                      <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                        Thanh toán
+                      </div>
+                      <div className="mt-0.5 font-extrabold text-slate-900 dark:text-slate-100">{formatVnd(o.totalVnd)}</div>
+                    </div>
+                    <div className="rounded-lg bg-slate-50 p-2 ring-1 ring-inset ring-slate-200 dark:bg-slate-900/40 dark:ring-slate-800">
+                      <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                        Số lượng
+                      </div>
+                      <div className="mt-0.5 font-extrabold text-slate-900 dark:text-slate-100">
+                        {o.quantity.toLocaleString('vi-VN')}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-2 flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                        Đơn hàng
+                      </div>
+                      <div className="truncate font-semibold text-slate-900 dark:text-slate-100">{o.smmOrderId ?? '—'}</div>
+                      {o.refundedAt ? (
+                        <div className="mt-0.5 text-[10px] leading-tight text-slate-500 dark:text-slate-400">
+                          Hoàn {formatVnd(o.refundedVnd)}
+                        </div>
+                      ) : null}
+                    </div>
+
+                    {!isRefunded ? (
+                      <button
+                        type="button"
+                        disabled={!token || !o.smmOrderId || Boolean(checkingOrderId)}
+                        onClick={() => void checkStatus({ id: o.id, smmOrderId: o.smmOrderId })}
+                        className="inline-flex h-10 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-extrabold text-slate-900 shadow-sm hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100 dark:hover:bg-slate-900"
+                      >
+                        {checkingOrderId === o.id ? '...' : 'Check'}
+                      </button>
+                    ) : (
+                      <div className="h-10" />
+                    )}
+                  </div>
+                </div>
+              )
+            })
+          ) : (
+            <div className="rounded-xl border border-slate-200 bg-white p-4 text-center text-sm text-slate-600 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300">
+              {loading ? 'Đang tải...' : 'Chưa có đơn nào.'}
+            </div>
+          )}
+        </div>
+
+        {/* Desktop/tablet: table */}
+        <div className="mt-3 hidden overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800 sm:block">
+          <div className="max-h-[380px] overflow-auto overscroll-contain">
             <table className="min-w-full divide-y divide-slate-200 text-sm">
-              <thead className="sticky top-0 bg-slate-50">
+              <thead className="sticky top-0 bg-slate-50 dark:bg-slate-900/40">
                 <tr>
                   <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
                     Dịch vụ
@@ -294,13 +325,13 @@ export default function UserPanel({
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-200 bg-white">
+              <tbody className="divide-y divide-slate-200 bg-white dark:bg-slate-950">
                 {orders.length ? (
                   orders.map((o) => (
-                    <tr key={o.id} className="hover:bg-slate-50">
+                    <tr key={o.id} className="hover:bg-slate-50 dark:hover:bg-slate-900/40">
                       <td className="px-3 py-2 align-top">
-                        <div className="font-semibold text-slate-900">{o.serviceId}</div>
-                        <div className="mt-0.5 text-[10px] font-normal leading-tight text-slate-500">
+                        <div className="font-semibold text-slate-900 dark:text-slate-100">{o.serviceId}</div>
+                        <div className="mt-0.5 text-[10px] font-normal leading-tight text-slate-500 dark:text-slate-400">
                           {formatDateTime(o.createdAt)}
                         </div>
                       </td>
@@ -309,7 +340,7 @@ export default function UserPanel({
                           href={o.link}
                           target="_blank"
                           rel="noreferrer"
-                          className="line-clamp-1 max-w-[260px] font-semibold text-sky-700 hover:underline"
+                          className="line-clamp-1 max-w-[260px] font-semibold text-sky-700 hover:underline dark:text-sky-300"
                           title={o.link}
                         >
                           {o.link}
@@ -324,22 +355,22 @@ export default function UserPanel({
                             type="button"
                             disabled={!token || !o.smmOrderId || Boolean(checkingOrderId)}
                             onClick={() => void checkStatus({ id: o.id, smmOrderId: o.smmOrderId })}
-                            className="inline-flex h-8 max-w-full items-center justify-center whitespace-normal rounded-lg border border-slate-200 bg-white px-2 py-1 text-center text-[11px] font-semibold leading-tight text-slate-800 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                            className="inline-flex h-8 max-w-full items-center justify-center whitespace-normal rounded-lg border border-slate-200 bg-white px-2 py-1 text-center text-[11px] font-semibold leading-tight text-slate-800 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100 dark:hover:bg-slate-900"
                           >
                             {checkingOrderId === o.id ? '...' : 'Check'}
                           </button>
                         )}
                       </td>
                       <td className="whitespace-nowrap px-3 py-2 text-right align-top">
-                        <div className="font-semibold text-slate-900">{formatVnd(o.totalVnd)}</div>
-                        <div className="mt-0.5 text-[10px] font-medium leading-tight text-slate-500">
+                        <div className="font-semibold text-slate-900 dark:text-slate-100">{formatVnd(o.totalVnd)}</div>
+                        <div className="mt-0.5 text-[10px] font-medium leading-tight text-slate-500 dark:text-slate-400">
                           SL: {o.quantity.toLocaleString('vi-VN')}
                         </div>
                       </td>
                       <td className="px-3 py-2 align-top">
-                        <div className="font-semibold text-slate-900">{o.smmOrderId ?? '—'}</div>
+                        <div className="font-semibold text-slate-900 dark:text-slate-100">{o.smmOrderId ?? '—'}</div>
                         {o.refundedAt ? (
-                          <div className="mt-1 text-[10px] font-normal leading-tight text-slate-500">
+                          <div className="mt-1 text-[10px] font-normal leading-tight text-slate-500 dark:text-slate-400">
                             Hoàn {formatVnd(o.refundedVnd)}
                           </div>
                         ) : null}
@@ -348,7 +379,7 @@ export default function UserPanel({
                   ))
                 ) : (
                   <tr>
-                    <td className="px-3 py-4 text-center text-slate-600" colSpan={6}>
+                    <td className="px-3 py-4 text-center text-slate-600 dark:text-slate-300" colSpan={6}>
                       {loading ? 'Đang tải...' : 'Chưa có đơn nào.'}
                     </td>
                   </tr>
@@ -359,42 +390,29 @@ export default function UserPanel({
         </div>
 
         <div className="mt-3 flex items-center justify-between gap-3 text-sm">
-          <div className="text-slate-600">
-            Tổng: <span className="font-semibold text-slate-900">{total}</span>
+          <div className="text-slate-600 dark:text-slate-300">
+            Tổng: <span className="font-semibold text-slate-900 dark:text-slate-100">{total}</span>
           </div>
           <div className="flex items-center gap-2">
             <button
               type="button"
               disabled={!isAuthed || !token || loading || page <= 1}
               onClick={() => void load({ page: Math.max(1, page - 1) })}
-              className="inline-flex h-9 items-center justify-center rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-800 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex h-9 items-center justify-center rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-800 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100 dark:hover:bg-slate-900"
             >
               Prev
             </button>
-            <div className="font-semibold text-slate-900">Trang {page}</div>
+            <div className="font-semibold text-slate-900 dark:text-slate-100">Trang {page}</div>
             <button
               type="button"
               disabled={!isAuthed || !token || loading || page * pageSize >= total || total <= 0}
               onClick={() => void load({ page: page + 1 })}
-              className="inline-flex h-9 items-center justify-center rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-800 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex h-9 items-center justify-center rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-800 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100 dark:hover:bg-slate-900"
             >
               Next
             </button>
           </div>
         </div>
-      </div>
-    </div>
-  )
-}
-
-function Row({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="grid grid-cols-[110px_1fr] items-start gap-3">
-      <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-        {label}
-      </div>
-      <div className="min-w-0 text-sm font-semibold text-slate-800">
-        <span className="break-words whitespace-normal">{value}</span>
       </div>
     </div>
   )
