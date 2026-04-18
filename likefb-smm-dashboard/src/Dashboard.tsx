@@ -16,31 +16,28 @@ function hasToken(text: string, token: string) {
   return new RegExp(`(^|[\\s/\\\\|,._\\-])${escaped}([\\s/\\\\|,._\\-]|$)`).test(text)
 }
 
-function hasAnyToken(text: string, tokens: string[]) {
-  return tokens.some((token) => hasToken(text, token))
-}
-
 function normalizePlatform(category: string, name: string): Platform {
   const s = `${category} ${name}`.toLowerCase()
+  const anyTok = (tokens: string[]) => tokens.some((token) => hasToken(s, token))
 
   const hasFacebookSignals =
     s.includes('facebook') ||
     s.includes('messenger') ||
     s.includes('fanpage') ||
-    hasAnyToken(s, ['fb'])
+    anyTok(['fb'])
 
   if (
     s.includes('telegram') ||
     s.includes('t.me') ||
     /tele\s*gram/.test(s) ||
-    hasAnyToken(s, ['tg'])
+    anyTok(['tg'])
   ) {
     return 'Telegram'
   }
 
   if (
     s.includes('tiktok') ||
-    hasAnyToken(s, ['tt']) ||
+    anyTok(['tt']) ||
     s.includes('douyin')
   ) {
     return 'TikTok'
@@ -51,20 +48,20 @@ function normalizePlatform(category: string, name: string): Platform {
     s.includes('insta') ||
     s.includes('threads') ||
     s.includes('threads.net') ||
-    hasAnyToken(s, ['ig'])
+    anyTok(['ig'])
   ) {
     return 'Instagram'
   }
 
   // "reel/reels" can appear in Facebook services too (FB Reels),
   // so only treat it as Instagram when we don't see Facebook signals.
-  if (hasAnyToken(s, ['reel', 'reels']) && !hasFacebookSignals) {
+  if (anyTok(['reel', 'reels']) && !hasFacebookSignals) {
     return 'Instagram'
   }
 
   if (
     s.includes('youtube') ||
-    hasAnyToken(s, ['yt', 'ytb']) ||
+    anyTok(['yt', 'ytb']) ||
     s.includes('shorts')
   ) {
     return 'YouTube'
@@ -73,7 +70,7 @@ function normalizePlatform(category: string, name: string): Platform {
   if (
     s.includes('twitter') ||
     s.includes('x.com') ||
-    hasAnyToken(s, ['tweet', 'tweets']) ||
+    anyTok(['tweet', 'tweets']) ||
     hasToken(s, 'x')
   ) {
     return 'X'
@@ -83,7 +80,7 @@ function normalizePlatform(category: string, name: string): Platform {
     s.includes('facebook') ||
     s.includes('messenger') ||
     s.includes('fanpage') ||
-    hasAnyToken(s, ['fb'])
+    anyTok(['fb'])
   ) {
     return 'Facebook'
   }
@@ -104,10 +101,6 @@ function coercePlatform(upstreamPlatform: unknown, category: string, name: strin
 function toNumber(x: string | number) {
   const n = typeof x === 'number' ? x : Number(String(x).trim())
   return Number.isFinite(n) ? n : 0
-}
-
-function roundVnd(n: number) {
-  return Math.round(n)
 }
 
 function parseQty(text: string | number) {
@@ -195,7 +188,7 @@ export default function Dashboard() {
 
             const panelRate = toNumber(r.rate)
             const markupMultiplier = ov?.markupMultiplier ?? DEFAULT_MARKUP
-            const sellRate = roundVnd(panelRate * markupMultiplier)
+            const sellRate = Math.round(panelRate * markupMultiplier)
 
             return {
               id,
@@ -400,7 +393,7 @@ export default function Dashboard() {
     if (!selectedService) return 0
     const qty = parseQty(draft.quantity)
     if (!Number.isFinite(qty)) return 0
-    return Math.max(0, roundVnd((qty / 1000) * selectedService.rateVndPer1k))
+    return Math.max(0, Math.round((qty / 1000) * selectedService.rateVndPer1k))
   }, [draft.quantity, selectedService])
 
   const canSubmit = useMemo(() => {

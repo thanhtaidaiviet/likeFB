@@ -189,6 +189,77 @@ app.get('/api/smm/services', async (req, res) => {
   }
 })
 
+app.get('/api/smm/balance', async (req, res) => {
+  try {
+    requireUser(req)
+    const data = await smmRequest({ key: smmApiKey(), action: 'balance' })
+    return res.json(data)
+  } catch (e: any) {
+    const msg = e?.message || 'UNKNOWN'
+    if (msg === 'UNAUTHORIZED') return res.status(401).json({ error: 'UNAUTHORIZED' })
+    return res.status(502).json({ error: 'SMM_UPSTREAM_ERROR', detail: msg })
+  }
+})
+
+const smmAddSchema = z
+  .object({
+    service: z.union([z.string(), z.number()]),
+    link: z.string().min(1),
+    quantity: z.union([z.string(), z.number()]),
+    comments: z.string().min(1).max(10000).optional(),
+  })
+  .strict()
+
+const smmStatusSchema = z
+  .object({
+    order: z.union([z.string(), z.number()]),
+  })
+  .strict()
+
+app.post('/api/smm/add', async (req, res) => {
+  try {
+    requireUser(req)
+    const parsed = smmAddSchema.safeParse(req.body)
+    if (!parsed.success) return res.status(400).json({ error: 'INVALID_INPUT' })
+
+    const b = parsed.data
+    const params: Record<string, string> = {
+      key: smmApiKey(),
+      action: 'add',
+      service: String(b.service),
+      link: String(b.link),
+      quantity: String(b.quantity),
+    }
+    if (b.comments) params.comments = b.comments
+
+    const data = await smmRequest(params)
+    return res.json(data)
+  } catch (e: any) {
+    const msg = e?.message || 'UNKNOWN'
+    if (msg === 'UNAUTHORIZED') return res.status(401).json({ error: 'UNAUTHORIZED' })
+    return res.status(502).json({ error: 'SMM_UPSTREAM_ERROR', detail: msg })
+  }
+})
+
+app.post('/api/smm/status', async (req, res) => {
+  try {
+    requireUser(req)
+    const parsed = smmStatusSchema.safeParse(req.body)
+    if (!parsed.success) return res.status(400).json({ error: 'INVALID_INPUT' })
+
+    const data = await smmRequest({
+      key: smmApiKey(),
+      action: 'status',
+      order: String(parsed.data.order),
+    })
+    return res.json(data)
+  } catch (e: any) {
+    const msg = e?.message || 'UNKNOWN'
+    if (msg === 'UNAUTHORIZED') return res.status(401).json({ error: 'UNAUTHORIZED' })
+    return res.status(502).json({ error: 'SMM_UPSTREAM_ERROR', detail: msg })
+  }
+})
+
 const checkStatusSchema = z.object({ orderId: z.string().uuid() }).strict()
 
 app.post('/api/orders/check-status', async (req, res) => {
@@ -276,6 +347,44 @@ app.post('/api/orders/check-status', async (req, res) => {
     return res.status(502).json({ error: 'SMM_UPSTREAM_ERROR', detail: msg })
   } finally {
     client.release()
+  }
+})
+
+app.get('/api/account/balance', async (req, res) => {
+  try {
+    const jwt = requireUser(req)
+    const r = await getPool().query('select balance_vnd from users where id = $1', [jwt.sub])
+    const row = r.rows[0] as { balance_vnd: string | number } | undefined
+    if (!row) return res.status(404).json({ error: 'USER_NOT_FOUND' })
+    return res.json({ balanceVnd: Number(row.balance_vnd) })
+  } catch (e: any) {
+    const msg = e?.message || 'UNKNOWN'
+    if (msg === 'UNAUTHORIZED') return res.status(401).json({ error: 'UNAUTHORIZED' })
+    console.error(e)
+    return res.status(500).json({ error: 'SERVER_ERROR', detail: msg })
+  }
+})
+
+const topupSchema = z.object({ amountVnd: z.number().int().positive().max(1_000_000_000) }).strict()
+
+app.post('/api/account/topup', async (req, res) => {
+  try {
+    const jwt = requireUser(req)
+    const parsed = topupSchema.safeParse(req.body)
+    if (!parsed.success) return res.status(400).json({ error: 'INVALID_INPUT' })
+    const { amountVnd } = parsed.data
+    const r = await getPool().query(
+      'update users set balance_vnd = balance_vnd + $1 where id = $2 returning balance_vnd',
+      [amountVnd, jwt.sub],
+    )
+    const row = r.rows[0] as { balance_vnd: string | number } | undefined
+    if (!row) return res.status(404).json({ error: 'USER_NOT_FOUND' })
+    return res.json({ balanceVnd: Number(row.balance_vnd) })
+  } catch (e: any) {
+    const msg = e?.message || 'UNKNOWN'
+    if (msg === 'UNAUTHORIZED') return res.status(401).json({ error: 'UNAUTHORIZED' })
+    console.error(e)
+    return res.status(500).json({ error: 'SERVER_ERROR', detail: msg })
   }
 })
 
@@ -445,6 +554,49 @@ app.get('/api/admin/free-like/history', async (req, res) => {
     if (msg === 'FORBIDDEN') return res.status(403).json({ error: 'FORBIDDEN' })
     console.error(e)
     return res.status(500).json({ error: 'SERVER_ERROR', detail: msg })
+  }
+})
+
+const quoteSchema = z
+  .object({
+    service: z.union([z.string(), z.number()]),
+    quantity: z.number().int().positive().max(100_000_000),
+  })
+  .strict()
+
+app.post('/api/orders/quote', async (req, res) => {
+  try {
+    requireUser(req)
+    const parsed = quoteSchema.safeParse(req.body)
+    if (!parsed.success) return res.status(400).json({ error: 'INVALID_INPUT' })
+
+    const serviceId = String(parsed.data.service)
+    const qty = parsed.data.quantity
+
+    const info = await getPanelRateVndPer1k(serviceId)
+    if (!info) return res.status(404).json({ error: 'SERVICE_NOT_FOUND' })
+
+    const panelRate = info.rate
+    const sellRate = roundVnd(panelRate * MARKUP_MULTIPLIER)
+    const sellTotalVnd = computeSellTotalVnd(panelRate, qty)
+
+    return res.json({
+      service: serviceId,
+      quantity: qty,
+      panelRateVndPer1k: panelRate,
+      markupMultiplier: MARKUP_MULTIPLIER,
+      sellRateVndPer1k: sellRate,
+      sellTotalVnd,
+      min: info.min,
+      max: info.max,
+      name: info.row.name,
+      category: info.row.category,
+      platform: info.row.platform ?? null,
+    })
+  } catch (e: any) {
+    const msg = e?.message || 'UNKNOWN'
+    if (msg === 'UNAUTHORIZED') return res.status(401).json({ error: 'UNAUTHORIZED' })
+    return res.status(502).json({ error: 'SMM_UPSTREAM_ERROR', detail: msg })
   }
 })
 
@@ -778,32 +930,12 @@ app.get('/api/orders/history', async (req, res) => {
   }
 })
 
-const googleClient = new OAuth2Client()
+const registerSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(7).max(200),
+})
 
-const authSessionSchema = z.discriminatedUnion('kind', [
-  z
-    .object({
-      kind: z.literal('register'),
-      email: z.string().email(),
-      password: z.string().min(7).max(200),
-    })
-    .strict(),
-  z
-    .object({
-      kind: z.literal('login'),
-      email: z.string().min(1).max(320),
-      password: z.string().min(1).max(200),
-    })
-    .strict(),
-  z
-    .object({
-      kind: z.literal('google'),
-      idToken: z.string().min(10),
-    })
-    .strict(),
-])
-
-function authSessionInputErrorCode(err: z.ZodError) {
+function inputErrorCode(err: z.ZodError) {
   for (const issue of err.issues) {
     const field = issue.path?.[0]
     if (field === 'email') return 'EMAIL_INVALID'
@@ -811,72 +943,91 @@ function authSessionInputErrorCode(err: z.ZodError) {
       if (issue.code === 'too_small') return 'WEAK_PASSWORD'
       return 'INVALID_PASSWORD'
     }
-    if (field === 'idToken') return 'INVALID_INPUT'
   }
   return 'INVALID_INPUT'
 }
 
-app.post('/api/auth/session', async (req, res) => {
-  const parsed = authSessionSchema.safeParse(req.body)
-  if (!parsed.success) return res.status(400).json({ error: authSessionInputErrorCode(parsed.error) })
+app.post('/api/auth/register', async (req, res) => {
+  const parsed = registerSchema.safeParse(req.body)
+  if (!parsed.success) return res.status(400).json({ error: inputErrorCode(parsed.error) })
 
-  const body = parsed.data
+  const { email, password } = parsed.data
+  const passwordHash = await hashPassword(password)
 
-  if (body.kind === 'register') {
-    const passwordHash = await hashPassword(body.password)
-    try {
-      const id = crypto.randomUUID()
-      const result = await getPool().query(
-        'insert into users (id, email, password_hash) values ($1, $2, $3) returning id, email, created_at, balance_vnd',
-        [id, body.email.toLowerCase(), passwordHash],
-      )
-      const row = result.rows[0] as { id: string; email: string; balance_vnd: string | number }
-      const token = signAccessToken({ sub: row.id, email: row.email })
-      return res
-        .status(201)
-        .json({ token, user: { id: row.id, email: row.email, balanceVnd: Number(row.balance_vnd) } })
-    } catch (err: any) {
-      if (err?.code === '23505') return res.status(409).json({ error: 'EMAIL_EXISTS' })
-      console.error(err)
-      return res.status(500).json({ error: 'SERVER_ERROR' })
-    }
-  }
-
-  if (body.kind === 'login') {
-    let { email, password } = body
-    const raw = String(email).trim()
-    const isAdminAlias = raw.toLowerCase() === 'admin'
-    if (isAdminAlias) {
-      email = ADMIN_EMAIL
-    } else {
-      const okEmail = z.string().email().safeParse(raw)
-      if (!okEmail.success) return res.status(400).json({ error: 'EMAIL_INVALID' })
-      email = okEmail.data
-    }
-
+  try {
+    const id = crypto.randomUUID()
     const result = await getPool().query(
-      'select id, email, password_hash, balance_vnd from users where email = $1',
-      [email.toLowerCase()],
+      'insert into users (id, email, password_hash) values ($1, $2, $3) returning id, email, created_at, balance_vnd',
+      [id, email.toLowerCase(), passwordHash],
     )
-    const row = result.rows[0] as
-      | { id: string; email: string; password_hash: string | null; balance_vnd: string | number }
-      | undefined
-    if (!row) return res.status(404).json({ error: 'USER_NOT_FOUND' })
-    if (!row.password_hash) return res.status(409).json({ error: 'PASSWORD_NOT_SET' })
-
-    const ok = await verifyPassword(password, row.password_hash)
-    if (!ok) return res.status(401).json({ error: 'INVALID_PASSWORD' })
-
+    const row = result.rows[0] as { id: string; email: string; balance_vnd: string | number }
     const token = signAccessToken({ sub: row.id, email: row.email })
-    return res.json({ token, user: { id: row.id, email: row.email, balanceVnd: Number(row.balance_vnd) } })
+    return res
+      .status(201)
+      .json({ token, user: { id: row.id, email: row.email, balanceVnd: Number(row.balance_vnd) } })
+  } catch (err: any) {
+    if (err?.code === '23505') return res.status(409).json({ error: 'EMAIL_EXISTS' })
+    console.error(err)
+    return res.status(500).json({ error: 'SERVER_ERROR' })
   }
+})
+
+const loginSchema = z
+  .object({
+    email: z.string().min(1).max(320),
+    password: z.string().min(1).max(200),
+  })
+  .strict()
+
+app.post('/api/auth/login', async (req, res) => {
+  const parsed = loginSchema.safeParse(req.body)
+  if (!parsed.success) return res.status(400).json({ error: inputErrorCode(parsed.error) })
+  let { email, password } = parsed.data
+
+  const raw = String(email).trim()
+  const isAdminAlias = raw.toLowerCase() === 'admin'
+  if (isAdminAlias) {
+    email = ADMIN_EMAIL
+  } else {
+    // Require standard email for non-admin login
+    const okEmail = z.string().email().safeParse(raw)
+    if (!okEmail.success) return res.status(400).json({ error: 'EMAIL_INVALID' })
+    email = okEmail.data
+  }
+
+  const result = await getPool().query(
+    'select id, email, password_hash, balance_vnd from users where email = $1',
+    [email.toLowerCase()],
+  )
+  const row = result.rows[0] as
+    | { id: string; email: string; password_hash: string | null; balance_vnd: string | number }
+    | undefined
+  if (!row) return res.status(404).json({ error: 'USER_NOT_FOUND' })
+  if (!row.password_hash) return res.status(409).json({ error: 'PASSWORD_NOT_SET' })
+
+  const ok = await verifyPassword(password, row.password_hash)
+  if (!ok) return res.status(401).json({ error: 'INVALID_PASSWORD' })
+
+  const token = signAccessToken({ sub: row.id, email: row.email })
+  return res.json({ token, user: { id: row.id, email: row.email, balanceVnd: Number(row.balance_vnd) } })
+})
+
+const googleLoginSchema = z.object({
+  idToken: z.string().min(10),
+})
+
+const googleClient = new OAuth2Client()
+
+app.post('/api/auth/google', async (req, res) => {
+  const parsed = googleLoginSchema.safeParse(req.body)
+  if (!parsed.success) return res.status(400).json({ error: 'INVALID_INPUT' })
 
   const clientId = process.env.GOOGLE_CLIENT_ID
   if (!clientId) return res.status(500).json({ error: 'GOOGLE_NOT_CONFIGURED' })
 
   try {
     const ticket = await googleClient.verifyIdToken({
-      idToken: body.idToken,
+      idToken: parsed.data.idToken,
       audience: clientId,
     })
     const payload = ticket.getPayload()
@@ -884,6 +1035,7 @@ app.post('/api/auth/session', async (req, res) => {
     const email = payload?.email
     if (!sub || !email) return res.status(401).json({ error: 'INVALID_GOOGLE_TOKEN' })
 
+    // Upsert: prefer google_sub; if email already exists, attach google_sub.
     const lowerEmail = String(email).toLowerCase()
     const newId = crypto.randomUUID()
     const dbRes = await getPool().query(
