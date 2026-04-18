@@ -13,8 +13,6 @@ type SmmRawService = {
   dripfeed?: boolean | number | string
 }
 
-type SmmAddResponse = Record<string, unknown>
-type SmmStatusResponse = Record<string, unknown>
 type OrdersPlaceResponse = {
   ok: boolean
   orderId: string
@@ -213,16 +211,6 @@ export async function apiPanelServices(token: string) {
   return await requestJson<SmmRawService[]>('/smm/services', token, { method: 'GET' })
 }
 
-export async function apiSmmAdd(
-  token: string,
-  body: { service: string | number; link: string; quantity: string | number; comments?: string },
-) {
-  return await requestJson<SmmAddResponse>('/api/smm/add', token, {
-    method: 'POST',
-    body: JSON.stringify(body),
-  })
-}
-
 export async function apiFreeLikePlace(
   token: string,
   body: { platform: string; service: string | number; link: string; quantity: number },
@@ -237,37 +225,20 @@ export async function apiAdminFreeLikeHistory(
   token: string,
   params?: { limit?: number; offset?: number; platform?: string },
 ) {
-  const usp = new URLSearchParams()
-  if (params?.limit != null) usp.set('limit', String(params.limit))
-  if (params?.offset != null) usp.set('offset', String(params.offset))
-  if (params?.platform) usp.set('platform', String(params.platform))
-  const suffix = usp.toString() ? `?${usp.toString()}` : ''
-  return await requestJson<AdminFreeLikeHistoryResponse>(`/api/admin/free-like/history${suffix}`, token, {
-    method: 'GET',
-  })
-}
-
-export async function apiSmmStatus(token: string, body: { order: string | number }) {
-  return await requestJson<SmmStatusResponse>('/api/smm/status', token, {
+  const body: Record<string, unknown> = { action: 'freeLikeHistory' }
+  if (params?.limit != null) body.limit = params.limit
+  if (params?.offset != null) body.offset = params.offset
+  if (params?.platform) body.platform = params.platform
+  return await requestJson<AdminFreeLikeHistoryResponse>('/api/admin', token, {
     method: 'POST',
     body: JSON.stringify(body),
   })
 }
 
 export async function apiOrdersCheckStatus(token: string, body: { orderId: string }) {
-  return await requestJson<OrdersCheckStatusResponse>('/api/orders/check-status', token, {
+  return await requestJson<OrdersCheckStatusResponse>('/api/orders', token, {
     method: 'POST',
-    body: JSON.stringify(body),
-  })
-}
-
-export async function apiPanelAdd(
-  token: string,
-  body: { service: string | number; link: string; quantity: string | number; comments?: string },
-) {
-  return await requestJson<SmmAddResponse>('/smm/add', token, {
-    method: 'POST',
-    body: JSON.stringify(body),
+    body: JSON.stringify({ action: 'checkStatus', ...body }),
   })
 }
 
@@ -275,9 +246,9 @@ export async function apiOrdersPlace(
   token: string,
   body: { service: string | number; link: string; quantity: number; comments?: string },
 ) {
-  return await requestJson<OrdersPlaceResponse>('/api/orders/place', token, {
+  return await requestJson<OrdersPlaceResponse>('/api/orders', token, {
     method: 'POST',
-    body: JSON.stringify(body),
+    body: JSON.stringify({ action: 'place', ...body }),
   })
 }
 
@@ -295,9 +266,9 @@ export async function apiOrdersHistory(
 }
 
 export async function apiAdminTopup(token: string, body: { email: string; amountVnd: number }) {
-  return await requestJson<AdminTopupResponse>('/api/admin/topup', token, {
+  return await requestJson<AdminTopupResponse>('/api/admin', token, {
     method: 'POST',
-    body: JSON.stringify(body),
+    body: JSON.stringify({ action: 'topup', ...body }),
   })
 }
 
@@ -305,15 +276,14 @@ export async function apiAdminUsers(
   token: string,
   params?: { q?: string; limit?: number; offset?: number },
 ) {
-  const q = params?.q ? String(params.q) : ''
-  const limit = params?.limit != null ? String(params.limit) : ''
-  const offset = params?.offset != null ? String(params.offset) : ''
-  const usp = new URLSearchParams()
-  if (q) usp.set('q', q)
-  if (limit) usp.set('limit', limit)
-  if (offset) usp.set('offset', offset)
-  const suffix = usp.toString() ? `?${usp.toString()}` : ''
+  const body: Record<string, unknown> = { action: 'users' }
+  if (params?.q) body.q = params.q
+  if (params?.limit != null) body.limit = params.limit
+  if (params?.offset != null) body.offset = params.offset
 
-  return await requestJson<AdminUsersResponse>(`/api/admin/users${suffix}`, token, { method: 'GET' })
+  return await requestJson<AdminUsersResponse>('/api/admin', token, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
 }
 

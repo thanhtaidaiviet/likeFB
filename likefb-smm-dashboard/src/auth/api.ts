@@ -24,16 +24,16 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export async function apiLogin(email: string, password: string) {
-  return await requestJson<LoginResponse>('/api/auth/login', {
+  return await requestJson<LoginResponse>('/api/auth', {
     method: 'POST',
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({ action: 'login', email, password }),
   })
 }
 
 export async function apiRegister(email: string, password: string) {
-  return await requestJson<LoginResponse>('/api/auth/register', {
+  return await requestJson<LoginResponse>('/api/auth', {
     method: 'POST',
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({ action: 'register', email, password }),
   })
 }
 
@@ -47,9 +47,9 @@ export async function apiMe(token: string) {
 }
 
 export async function apiGoogleLogin(idToken: string) {
-  return await requestJson<LoginResponse>('/api/auth/google', {
+  return await requestJson<LoginResponse>('/api/auth', {
     method: 'POST',
-    body: JSON.stringify({ idToken }),
+    body: JSON.stringify({ action: 'google', idToken }),
   })
 }
 

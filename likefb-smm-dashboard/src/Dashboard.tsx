@@ -11,14 +11,13 @@ import { useToast } from './ui/toast'
 
 import type { Category, Platform, SmmService } from './types'
 
-function hasToken(text: string, token: string) {
-  const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  return new RegExp(`(^|[\\s/\\\\|,._\\-])${escaped}([\\s/\\\\|,._\\-]|$)`).test(text)
-}
-
 function normalizePlatform(category: string, name: string): Platform {
   const s = `${category} ${name}`.toLowerCase()
-  const anyTok = (tokens: string[]) => tokens.some((token) => hasToken(s, token))
+  const hasTok = (text: string, token: string) => {
+    const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    return new RegExp(`(^|[\\s/\\\\|,._\\-])${escaped}([\\s/\\\\|,._\\-]|$)`).test(text)
+  }
+  const anyTok = (tokens: string[]) => tokens.some((token) => hasTok(s, token))
 
   const hasFacebookSignals =
     s.includes('facebook') ||
@@ -71,7 +70,7 @@ function normalizePlatform(category: string, name: string): Platform {
     s.includes('twitter') ||
     s.includes('x.com') ||
     anyTok(['tweet', 'tweets']) ||
-    hasToken(s, 'x')
+    hasTok(s, 'x')
   ) {
     return 'X'
   }
@@ -86,16 +85,6 @@ function normalizePlatform(category: string, name: string): Platform {
   }
 
   return 'Facebook'
-}
-
-function coercePlatform(upstreamPlatform: unknown, category: string, name: string): Platform {
-  if (typeof upstreamPlatform === 'string') {
-    const trimmed = upstreamPlatform.trim()
-    if (trimmed) return trimmed
-  }
-
-  // Fallback: if upstream doesn't provide a usable platform, infer from the service text.
-  return normalizePlatform(category, name)
 }
 
 function toNumber(x: string | number) {
@@ -190,9 +179,15 @@ export default function Dashboard() {
             const markupMultiplier = ov?.markupMultiplier ?? DEFAULT_MARKUP
             const sellRate = Math.round(panelRate * markupMultiplier)
 
+            const upstreamPlat = r.platform
+            const resolvedPlat =
+              typeof upstreamPlat === 'string' && upstreamPlat.trim()
+                ? upstreamPlat.trim()
+                : normalizePlatform(r.category, r.name)
+
             return {
               id,
-              platform: ov?.platform ?? coercePlatform(r.platform, r.category, r.name),
+              platform: ov?.platform ?? resolvedPlat,
               category: ov?.category ?? String(r.category),
               name: ov?.name ?? r.name,
               type: r.type,
