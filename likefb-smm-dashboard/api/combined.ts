@@ -15,7 +15,6 @@ import smmStatus from './_lib/handlers/smm-status.js'
 import smmCancel from './_lib/handlers/smm-cancel.js'
 import smmRefill from './_lib/handlers/smm-refill.js'
 import smmRefillStatus from './_lib/handlers/smm-refill-status.js'
-import adminUsers from './_lib/handlers/admin-users.js'
 import adminTopup from './_lib/handlers/admin-topup.js'
 
 type H = (req: VercelRequest, res: VercelResponse) => Promise<void> | void
@@ -52,7 +51,6 @@ const localRoutes: Record<string, Partial<Record<string, H>>> = {
   'smm/cancel': { POST: smmCancel as H },
   'smm/refill': { POST: smmRefill as H },
   'smm/refill_status': { GET: smmRefillStatus as H },
-  'admin/users': { GET: adminUsers as H },
   'admin/topup': { POST: adminTopup as H },
 }
 

@@ -6,8 +6,25 @@ const smmErrorSchema = z
   })
   .passthrough()
 
+const DEFAULT_SMM_PANEL_URL = 'https://smm.com.vn/api/v2'
+
+/** POST tới …/api/v2 (form key + action), giống curl panel smm.com.vn. */
 export function smmApiUrl() {
-  return (process.env.SMM_API_URL || 'https://smm.com.vn/api/v2').trim().replace(/\/+$/, '')
+  const raw = (process.env.SMM_API_URL || DEFAULT_SMM_PANEL_URL).trim().replace(/\/+$/, '')
+  try {
+    const u = new URL(raw)
+    const host = u.hostname.toLowerCase()
+    if (host === 'smm.com.vn' || host === 'www.smm.com.vn') {
+      const path = (u.pathname || '/').replace(/\/+$/, '') || '/'
+      if (path === '/') {
+        u.pathname = '/api/v2'
+        return u.origin + u.pathname
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+  return raw
 }
 
 function smmApiBodyIsJson() {
@@ -119,7 +136,7 @@ function formatPanelMsg(msg: unknown): string {
 function augmentSmmUpstreamErrorMessage(text: string): string {
   const t = text.toLowerCase()
   if (t.includes('request not found') || t === 'not found' || t.includes('invalid request')) {
-    return `${text} — Kiểm tra SMM_API_URL (domain + /api/v2 hoặc /api/v1), SMM_API_KEY; thử SMM_API_KEY_FIELD=api_key; SMM_API_BODY_FORMAT=json nếu chỉ nhận JSON. (Đã tự thử lại JSON một lần khi gặp lỗi dạng này.)`
+    return `${text} — Kiểm tra SMM_API_URL (vd https://smm.com.vn/api/v2), SMM_API_KEY, SMM_COOKIE (PHPSESSID như curl); thử SMM_API_KEY_FIELD=api_key; SMM_API_BODY_FORMAT=json nếu chỉ nhận JSON. (Đã tự thử lại JSON một lần khi gặp lỗi dạng này.)`
   }
   return text
 }

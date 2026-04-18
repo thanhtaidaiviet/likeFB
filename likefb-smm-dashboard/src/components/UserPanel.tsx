@@ -274,10 +274,7 @@ export default function UserPanel({
             <table className="min-w-full divide-y divide-slate-200 text-sm">
               <thead className="sticky top-0 bg-slate-50">
                 <tr>
-                  <th className="whitespace-nowrap px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
-                    Thời gian
-                  </th>
-                  <th className="whitespace-nowrap px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
+                  <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
                     Dịch vụ
                   </th>
                   <th className="whitespace-nowrap px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
@@ -286,17 +283,14 @@ export default function UserPanel({
                   <th className="whitespace-nowrap px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
                     Trạng thái
                   </th>
-                  <th className="whitespace-nowrap px-3 py-2 text-right text-xs font-semibold uppercase tracking-wide text-slate-600">
-                    Thanh toán
-                  </th>
-                  <th className="whitespace-nowrap px-3 py-2 text-right text-xs font-semibold uppercase tracking-wide text-slate-600">
-                    Số lượng
-                  </th>
-                  <th className="whitespace-nowrap px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
-                    Mã đơn hàng
-                  </th>
                   <th className="whitespace-nowrap px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
                     Check
+                  </th>
+                  <th className="whitespace-nowrap px-3 py-2 text-right text-xs font-semibold uppercase tracking-wide text-slate-600">
+                    Thanh toán / SL
+                  </th>
+                  <th className="whitespace-nowrap px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
+                    Đơn hàng
                   </th>
                 </tr>
               </thead>
@@ -304,8 +298,12 @@ export default function UserPanel({
                 {orders.length ? (
                   orders.map((o) => (
                     <tr key={o.id} className="hover:bg-slate-50">
-                      <td className="whitespace-nowrap px-3 py-2 text-slate-800">{formatDateTime(o.createdAt)}</td>
-                      <td className="px-3 py-2 font-semibold text-slate-900">{o.serviceId}</td>
+                      <td className="px-3 py-2 align-top">
+                        <div className="font-semibold text-slate-900">{o.serviceId}</div>
+                        <div className="mt-0.5 text-[10px] font-normal leading-tight text-slate-500">
+                          {formatDateTime(o.createdAt)}
+                        </div>
+                      </td>
                       <td className="px-3 py-2">
                         <a
                           href={o.link}
@@ -317,21 +315,7 @@ export default function UserPanel({
                           {o.link}
                         </a>
                       </td>
-                      <td className="px-3 py-2 text-slate-800">
-                        {statusBadge(o.smmStatus)}
-                        {o.refundedAt ? (
-                          <div className="mt-1 text-xs text-slate-500">
-                            Hoàn {formatVnd(o.refundedVnd)} • {formatDateTime(o.refundedAt)}
-                          </div>
-                        ) : null}
-                      </td>
-                      <td className="whitespace-nowrap px-3 py-2 text-right font-semibold text-slate-900">
-                        {formatVnd(o.totalVnd)}
-                      </td>
-                      <td className="whitespace-nowrap px-3 py-2 text-right font-semibold text-slate-900">
-                        {o.quantity.toLocaleString('vi-VN')}
-                      </td>
-                      <td className="px-3 py-2 font-semibold text-slate-900">{o.smmOrderId ?? '—'}</td>
+                      <td className="px-3 py-2 text-slate-800">{statusBadge(o.smmStatus)}</td>
                       <td className="px-3 py-2">
                         {o.refundedAt ||
                         (o.smmStatus != null &&
@@ -340,17 +324,31 @@ export default function UserPanel({
                             type="button"
                             disabled={!token || !o.smmOrderId || Boolean(checkingOrderId)}
                             onClick={() => void checkStatus({ id: o.id, smmOrderId: o.smmOrderId })}
-                            className="inline-flex h-8 items-center justify-center rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-800 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                            className="inline-flex h-8 max-w-full items-center justify-center whitespace-normal rounded-lg border border-slate-200 bg-white px-2 py-1 text-center text-[11px] font-semibold leading-tight text-slate-800 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
                           >
                             {checkingOrderId === o.id ? '...' : 'Check'}
                           </button>
                         )}
                       </td>
+                      <td className="whitespace-nowrap px-3 py-2 text-right align-top">
+                        <div className="font-semibold text-slate-900">{formatVnd(o.totalVnd)}</div>
+                        <div className="mt-0.5 text-[10px] font-medium leading-tight text-slate-500">
+                          SL: {o.quantity.toLocaleString('vi-VN')}
+                        </div>
+                      </td>
+                      <td className="px-3 py-2 align-top">
+                        <div className="font-semibold text-slate-900">{o.smmOrderId ?? '—'}</div>
+                        {o.refundedAt ? (
+                          <div className="mt-1 text-[10px] font-normal leading-tight text-slate-500">
+                            Hoàn {formatVnd(o.refundedVnd)}
+                          </div>
+                        ) : null}
+                      </td>
                     </tr>
                   ))
                 ) : (
                   <tr>
-                    <td className="px-3 py-4 text-center text-slate-600" colSpan={9}>
+                    <td className="px-3 py-4 text-center text-slate-600" colSpan={6}>
                       {loading ? 'Đang tải...' : 'Chưa có đơn nào.'}
                     </td>
                   </tr>

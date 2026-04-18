@@ -5,7 +5,7 @@ import Sidebar, { type NavItem } from './components/Sidebar'
 import TopupModal from './components/TopupModal'
 import UserPanel from './components/UserPanel'
 import { useAuth } from './auth/AuthContext'
-import { apiAdminTopup, apiAdminUsers, apiFreeLikePlace, apiOrdersPlace, apiSmmServicesPublic } from './api/smm'
+import { apiAdminTopup, apiFreeLikePlace, apiOrdersPlace, apiSmmServicesPublic } from './api/smm'
 import { SERVICE_OVERRIDES } from './servicesOverrides'
 import { useToast } from './ui/toast'
 
@@ -115,8 +115,6 @@ const FREE_LIKE_SERVICES: Record<string, string> = {
 
 const ADMIN_EMAIL = 'adminlike@gmail.com'
 
-type AdminUserRow = { id: string; email: string; balanceVnd: number }
-
 export default function Dashboard() {
   const { status, user, token, logout, openLogin } = useAuth()
   const { toast } = useToast()
@@ -142,15 +140,6 @@ export default function Dashboard() {
   const adminTopupEmailInputRef = useRef<HTMLInputElement | null>(null)
 
   const [placingOrder, setPlacingOrder] = useState(false)
-
-  const [adminUsersOpen, setAdminUsersOpen] = useState(false)
-  const [adminUsersQuery, setAdminUsersQuery] = useState('')
-  const [adminUsers, setAdminUsers] = useState<AdminUserRow[]>([])
-  const [adminUsersTotal, setAdminUsersTotal] = useState(0)
-  const [adminUsersPage, setAdminUsersPage] = useState(1)
-  const [adminUsersBusy, setAdminUsersBusy] = useState(false)
-  const [adminUsersError, setAdminUsersError] = useState<string | null>(null)
-  const ADMIN_USERS_PAGE_SIZE = 5
 
   const [draft, setDraft] = useState<OrderDraft>({
     search: '',
@@ -511,28 +500,6 @@ export default function Dashboard() {
   const adminTopupEmailTrimmed = adminTopupEmail.trim().toLowerCase()
   const adminTopupEmailValid = Boolean(adminTopupEmailTrimmed) && adminTopupEmailTrimmed.includes('@')
 
-  async function loadAdminUsers(opts?: { q?: string; page?: number }) {
-    if (!token) return openLogin()
-    if (!isAdmin) return
-
-    const page = Math.max(1, Math.trunc(opts?.page ?? adminUsersPage))
-    const nextQ = opts?.q ?? adminUsersQuery
-    const offset = (page - 1) * ADMIN_USERS_PAGE_SIZE
-
-    setAdminUsersBusy(true)
-    setAdminUsersError(null)
-    try {
-      const res = await apiAdminUsers(token, { q: nextQ, limit: ADMIN_USERS_PAGE_SIZE, offset })
-      setAdminUsers(res.users)
-      setAdminUsersTotal(Number(res.total) || 0)
-      setAdminUsersPage(page)
-    } catch (e: any) {
-      setAdminUsersError(String(e?.message || 'ADMIN_USERS_FAILED'))
-    } finally {
-      setAdminUsersBusy(false)
-    }
-  }
-
   async function handleAdminTopupSubmit() {
     if (!token) return openLogin()
     if (!isAdmin) return
@@ -626,43 +593,20 @@ export default function Dashboard() {
               </div>
 
               {isAdmin ? (
-                <div className="grid gap-3 md:grid-cols-2">
-                  <button
-                    type="button"
-                    onClick={() => setAdminTopupOpen(true)}
-                    className="rounded-xl border border-indigo-200 bg-indigo-50 p-4 text-left text-indigo-950 transition hover:bg-indigo-100/60"
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="font-semibold">Admin: Nạp tiền user</div>
-                        <div className="mt-1 text-sm text-indigo-800">
-                          Nhập email user và số tiền cần cộng vào balance.
-                        </div>
+                <button
+                  type="button"
+                  onClick={() => setAdminTopupOpen(true)}
+                  className="w-full rounded-xl border border-indigo-200 bg-indigo-50 p-4 text-left text-indigo-950 transition hover:bg-indigo-100/60"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="font-semibold">Admin: Nạp tiền user</div>
+                      <div className="mt-1 text-sm text-indigo-800">
+                        Nhập email user và số tiền cần cộng vào balance.
                       </div>
                     </div>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setAdminUsersOpen(true)
-                      // load on open (no search)
-                      setAdminUsersQuery('')
-                      setAdminUsersPage(1)
-                      void loadAdminUsers({ q: '', page: 1 })
-                    }}
-                    className="rounded-xl border border-slate-200 bg-white p-4 text-left text-slate-950 transition hover:bg-slate-50"
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="font-semibold">Admin: Danh sách user</div>
-                        <div className="mt-1 text-sm text-slate-600">
-                          Xem email và số dư (balance_vnd), có tìm kiếm.
-                        </div>
-                      </div>
-                    </div>
-                  </button>
-                </div>
+                  </div>
+                </button>
               ) : null}
 
               <button
@@ -1014,148 +958,6 @@ export default function Dashboard() {
                 >
                   {adminTopupBusy ? 'Đang nạp...' : 'Nạp tiền'}
                 </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      ) : null}
-
-      {adminUsersOpen ? (
-        <div className="fixed inset-0 z-[47]">
-          <div
-            className="absolute inset-0 bg-slate-900/40"
-            onClick={() => (adminUsersBusy ? null : setAdminUsersOpen(false))}
-            role="button"
-            tabIndex={0}
-            aria-label="Đóng"
-          />
-          <div className="absolute inset-0 flex items-center justify-center p-4">
-            <div className="w-full max-w-4xl rounded-2xl border border-slate-200 bg-white shadow-xl">
-              <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-5 py-4">
-                <div className="min-w-0">
-                  <div className="truncate text-base font-semibold text-slate-900">
-                    Admin: Danh sách user
-                  </div>
-                  <div className="mt-0.5 text-sm text-slate-600">
-                    Tìm theo email. Hiển thị số dư hiện tại (balance_vnd).
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => (adminUsersBusy ? null : setAdminUsersOpen(false))}
-                  className="inline-flex size-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-800 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-                  aria-label="Đóng"
-                  disabled={adminUsersBusy}
-                >
-                  ×
-                </button>
-              </div>
-
-              <div className="grid gap-3 p-5">
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                  <input
-                    value={adminUsersQuery}
-                    onChange={(e) => setAdminUsersQuery(e.target.value)}
-                    placeholder="Nhập email để tìm..."
-                    disabled={adminUsersBusy}
-                    className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm shadow-sm outline-none focus:ring-2 focus:ring-slate-500 disabled:cursor-not-allowed disabled:bg-slate-50 sm:flex-1"
-                  />
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      onClick={() => void loadAdminUsers({ q: adminUsersQuery, page: 1 })}
-                      disabled={adminUsersBusy}
-                      className="inline-flex h-10 items-center justify-center rounded-lg bg-slate-900 px-4 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      {adminUsersBusy ? 'Đang tải...' : 'Tìm'}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setAdminUsersQuery('')
-                        void loadAdminUsers({ q: '', page: 1 })
-                      }}
-                      disabled={adminUsersBusy}
-                      className="inline-flex h-10 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-800 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      Reset
-                    </button>
-                  </div>
-                </div>
-
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="text-sm text-slate-600">
-                    Tổng: <span className="font-semibold text-slate-900">{adminUsersTotal}</span> user
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      disabled={adminUsersBusy || adminUsersPage <= 1}
-                      onClick={() =>
-                        void loadAdminUsers({ q: adminUsersQuery, page: Math.max(1, adminUsersPage - 1) })
-                      }
-                      className="inline-flex h-9 items-center justify-center rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-800 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      Prev
-                    </button>
-                    <div className="text-sm font-semibold text-slate-900">
-                      Trang {adminUsersPage}
-                    </div>
-                    <button
-                      type="button"
-                      disabled={
-                        adminUsersBusy ||
-                        adminUsersPage * ADMIN_USERS_PAGE_SIZE >= adminUsersTotal ||
-                        adminUsersTotal <= 0
-                      }
-                      onClick={() => void loadAdminUsers({ q: adminUsersQuery, page: adminUsersPage + 1 })}
-                      className="inline-flex h-9 items-center justify-center rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-800 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      Next
-                    </button>
-                  </div>
-                </div>
-
-                {adminUsersError ? (
-                  <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-900">
-                    Lỗi: {adminUsersError}
-                  </div>
-                ) : null}
-
-                <div className="overflow-hidden rounded-xl border border-slate-200">
-                  <div className="max-h-[60vh] overflow-auto">
-                    <table className="min-w-full divide-y divide-slate-200 text-sm">
-                      <thead className="sticky top-0 bg-slate-50">
-                        <tr>
-                          <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
-                            Email
-                          </th>
-                          <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-600">
-                            Balance (VND)
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-200 bg-white">
-                        {adminUsers.length ? (
-                          adminUsers.map((u) => (
-                            <tr key={u.id} className="hover:bg-slate-50">
-                              <td className="px-4 py-3 font-medium text-slate-900">{u.email}</td>
-                              <td className="px-4 py-3 text-right font-semibold text-slate-900">
-                                {formatVnd(u.balanceVnd)}
-                              </td>
-                            </tr>
-                          ))
-                        ) : (
-                          <tr>
-                            <td className="px-4 py-6 text-center text-slate-600" colSpan={2}>
-                              {adminUsersBusy ? 'Đang tải...' : 'Không có dữ liệu.'}
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
               </div>
             </div>
           </div>

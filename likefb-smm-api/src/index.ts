@@ -86,7 +86,7 @@ function formatPanelMsg(msg: unknown): string {
 function augmentSmmUpstreamErrorMessage(text: string): string {
   const t = text.toLowerCase()
   if (t.includes('request not found') || t === 'not found' || t.includes('invalid request')) {
-    return `${text} — Kiểm tra SMM_API_URL (domain + /api/v2 hoặc /api/v1), SMM_API_KEY; thử SMM_API_KEY_FIELD=api_key nếu docs dùng tên khác; SMM_API_BODY_FORMAT=json nếu chỉ nhận JSON. (Code đã tự thử lại JSON một lần khi gặp lỗi dạng này.)`
+    return `${text} — Kiểm tra SMM_API_URL (vd https://smm.com.vn/api/v2), SMM_API_KEY, SMM_COOKIE (PHPSESSID như curl); thử SMM_API_KEY_FIELD=api_key; SMM_API_BODY_FORMAT=json nếu chỉ nhận JSON. (Code đã tự thử lại JSON một lần khi gặp lỗi dạng này.)`
   }
   return text
 }
@@ -112,8 +112,25 @@ function assertSmmPanelTransportOk(json: unknown): void {
   }
 }
 
+const DEFAULT_SMM_PANEL_URL = 'https://smm.com.vn/api/v2'
+
+/** Panel Perfect Panel: POST root là /api/v2 (vd curl …/api/v2 + x-www-form-urlencoded). */
 function smmApiUrlResolved() {
-  return (process.env.SMM_API_URL || 'https://smm.com.vn/api/v2').trim().replace(/\/+$/, '')
+  const raw = (process.env.SMM_API_URL || DEFAULT_SMM_PANEL_URL).trim().replace(/\/+$/, '')
+  try {
+    const u = new URL(raw)
+    const host = u.hostname.toLowerCase()
+    if (host === 'smm.com.vn' || host === 'www.smm.com.vn') {
+      const path = (u.pathname || '/').replace(/\/+$/, '') || '/'
+      if (path === '/') {
+        u.pathname = '/api/v2'
+        return u.origin + u.pathname
+      }
+    }
+  } catch {
+    /* giữ nguyên raw nếu không parse được URL */
+  }
+  return raw
 }
 
 function smmApiBodyIsJson() {
@@ -781,14 +798,6 @@ app.post('/api/orders', async (req, res) => {
 const adminActionSchema = z.discriminatedUnion('action', [
   z
     .object({
-      action: z.literal('users'),
-      q: z.string().optional(),
-      limit: z.number().optional(),
-      offset: z.number().optional(),
-    })
-    .strict(),
-  z
-    .object({
       action: z.literal('topup'),
       email: z.string().email(),
       amountVnd: z.number().finite(),
@@ -819,45 +828,6 @@ app.post('/api/admin', async (req, res) => {
     if (!parsed.success) return res.status(400).json({ error: 'INVALID_INPUT' })
     const body = parsed.data
 
-    if (body.action === 'users') {
-      const q = body.q != null ? String(body.q).trim() : ''
-      const limitRaw = body.limit != null ? Number(body.limit) : NaN
-      const offsetRaw = body.offset != null ? Number(body.offset) : NaN
-      const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(1, Math.trunc(limitRaw)), 1000) : 5
-      const offset = Number.isFinite(offsetRaw) ? Math.min(Math.max(0, Math.trunc(offsetRaw)), 1_000_000) : 0
-
-      const args: any[] = []
-      let where = ''
-      if (q) {
-        where = 'where email ilike $1'
-        args.push(`%${q}%`)
-      }
-      args.push(limit, offset)
-
-      const sql = `
-      select
-        id,
-        email,
-        coalesce(balance_vnd, 0) as balance_vnd,
-        count(*) over()::int as total
-      from users
-      ${where}
-      order by email asc
-      limit $${q ? 2 : 1}
-      offset $${q ? 3 : 2}
-    `
-
-      const r = await getPool().query(sql, args)
-      const total = Number((r.rows?.[0] as any)?.total ?? 0) || 0
-      const users = (r.rows as any[]).map((row) => ({
-        id: String(row.id),
-        email: String(row.email),
-        balanceVnd: Number(row.balance_vnd) || 0,
-      }))
-
-      return res.json({ ok: true, users, q, limit, offset, total })
-    }
-
     if (body.action === 'topup') {
       const targetEmail = String(body.email).toLowerCase()
       const amountVnd = normalizeTopupAmountVnd(body.amountVnd)
@@ -883,6 +853,7 @@ app.post('/api/admin', async (req, res) => {
       })
     }
 
+    // body.action === 'freeLikeHistory'
     const limitRaw = body.limit != null ? Number(body.limit) : NaN
     const offsetRaw = body.offset != null ? Number(body.offset) : NaN
     const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(1, Math.trunc(limitRaw)), 100) : 20

@@ -57,15 +57,6 @@ type AdminTopupResponse = {
   user: { id: string; email: string; balanceVnd: number }
 }
 
-type AdminUsersResponse = {
-  ok: boolean
-  q: string
-  limit: number
-  offset: number
-  total: number
-  users: { id: string; email: string; balanceVnd: number }[]
-}
-
 type FreeLikePlaceResponse = {
   ok: boolean
   id: string
@@ -486,21 +477,6 @@ export async function apiAdminTopup(token: string, body: { email: string; amount
   return await requestJson<AdminTopupResponse>('/api/admin', token, {
     method: 'POST',
     body: JSON.stringify({ action: 'topup', ...body }),
-  })
-}
-
-export async function apiAdminUsers(
-  token: string,
-  params?: { q?: string; limit?: number; offset?: number },
-) {
-  const body: Record<string, unknown> = { action: 'users' }
-  if (params?.q) body.q = params.q
-  if (params?.limit != null) body.limit = params.limit
-  if (params?.offset != null) body.offset = params.offset
-
-  return await requestJson<AdminUsersResponse>('/api/admin', token, {
-    method: 'POST',
-    body: JSON.stringify(body),
   })
 }
 
