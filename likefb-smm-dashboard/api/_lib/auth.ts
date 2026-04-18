@@ -1,6 +1,6 @@
 import type { VercelRequest } from '@vercel/node'
-import { bearerToken } from './http'
-import { verifyAccessToken, type JwtUser } from './jwt'
+import { bearerToken } from './http.js'
+import { verifyAccessToken, type JwtUser } from './jwt.js'
 
 export function requireUser(req: VercelRequest): JwtUser {
   const token = bearerToken(req)
