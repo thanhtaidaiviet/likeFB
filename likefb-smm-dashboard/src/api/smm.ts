@@ -1,5 +1,8 @@
 type SmmRawService = {
-  service: string | number
+  service?: string | number
+  service_id?: string | number
+  serviceId?: string | number
+  id?: string | number
   name: string
   category: string
   platform?: string
@@ -88,17 +91,106 @@ function pickApiCode(data: any): string | number | null {
   return null
 }
 
-/** Upstream may return a bare array or an object like `{ services: [...] }`. */
-export function normalizeSmmServicesJson(data: unknown): SmmRawService[] {
-  if (Array.isArray(data)) return data as SmmRawService[]
-  if (data && typeof data === 'object') {
-    const o = data as Record<string, unknown>
-    for (const k of ['services', 'data', 'list', 'items', 'result'] as const) {
-      const v = o[k]
-      if (Array.isArray(v)) return v as SmmRawService[]
-    }
+function looksLikeSmmServiceRow(x: unknown): boolean {
+  if (!x || typeof x !== 'object' || Array.isArray(x)) return false
+  const o = x as Record<string, unknown>
+  const svc = o.service ?? o.service_id ?? o.serviceId ?? o.Service
+  if (typeof svc === 'string' || typeof svc === 'number') return true
+  const id = o.id ?? o.ID
+  if ((typeof id === 'string' || typeof id === 'number') && (o.rate != null || o.min != null || o.max != null)) {
+    return true
   }
-  throw new Error('SMM_SERVICES_BAD_SHAPE')
+  return false
+}
+
+function isLikelyServicesList(arr: unknown[]): boolean {
+  if (arr.length === 0) return true
+  const n = Math.min(5, arr.length)
+  for (let i = 0; i < n; i++) {
+    if (!looksLikeSmmServiceRow(arr[i])) return false
+  }
+  return true
+}
+
+function servicesShapeHint(data: unknown): string {
+  if (data == null) return String(data)
+  if (Array.isArray(data)) return `array(len=${data.length})`
+  if (typeof data === 'object') {
+    const keys = Object.keys(data as object)
+    return `{${keys.slice(0, 20).join(',')}${keys.length > 20 ? ',…' : ''}}`
+  }
+  if (typeof data === 'string') {
+    const t = data.trim()
+    return `string(len=${t.length}${t.length > 80 ? ',head=' + JSON.stringify(t.slice(0, 80)) : ''})`
+  }
+  return typeof data
+}
+
+/** Walk nested JSON until we find an array of panel service rows (objects with `service` / `service_id`). */
+function findSmmServicesArray(root: unknown, maxDepth: number, seen: WeakSet<object>): unknown[] | null {
+  if (root == null || maxDepth < 0) return null
+
+  if (typeof root === 'string') {
+    const t = root.trim()
+    if ((t.startsWith('[') && t.endsWith(']')) || (t.startsWith('{') && t.endsWith('}'))) {
+      try {
+        return findSmmServicesArray(JSON.parse(t), maxDepth, seen)
+      } catch {
+        return null
+      }
+    }
+    return null
+  }
+
+  if (Array.isArray(root)) {
+    if (isLikelyServicesList(root)) return root
+    for (const el of root) {
+      const inner = findSmmServicesArray(el, maxDepth - 1, seen)
+      if (inner) return inner
+    }
+    return null
+  }
+
+  if (typeof root !== 'object') return null
+  if (seen.has(root)) return null
+  seen.add(root)
+
+  const o = root as Record<string, unknown>
+  const preferred = [
+    'services',
+    'data',
+    'list',
+    'items',
+    'result',
+    'rows',
+    'records',
+    'msg',
+    'response',
+    'body',
+    'payload',
+    'content',
+    'services_list',
+  ]
+  for (const k of preferred) {
+    if (!(k in o)) continue
+    const inner = findSmmServicesArray(o[k], maxDepth - 1, seen)
+    if (inner) return inner
+  }
+  for (const v of Object.values(o)) {
+    const inner = findSmmServicesArray(v, maxDepth - 1, seen)
+    if (inner) return inner
+  }
+  return null
+}
+
+/** Upstream may return a bare array, JSON string, or deeply nested wrappers. */
+export function normalizeSmmServicesJson(data: unknown): SmmRawService[] {
+  const seen = new WeakSet<object>()
+  const out = findSmmServicesArray(data, 12, seen)
+  if (!out) {
+    throw new Error(`SMM_SERVICES_BAD_SHAPE:${servicesShapeHint(data)}`)
+  }
+  return out as SmmRawService[]
 }
 
 function formatRequestFailedMessage(opts: {

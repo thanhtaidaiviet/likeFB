@@ -171,7 +171,8 @@ export default function Dashboard() {
         if (cancelled) return
         const mapped: SmmService[] = raw
           .map((r) => {
-            const id = String(r.service)
+            const id = String(r.service ?? r.service_id ?? r.serviceId ?? r.id ?? '').trim()
+            if (!id) return null
             const ov = SERVICE_OVERRIDES[id]
             if (ov?.hidden) return null
 
