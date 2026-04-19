@@ -874,10 +874,7 @@ export default function Dashboard() {
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <div className="font-semibold">Admin: Nạp tiền user</div>
-                      <div className="mt-1 text-sm text-indigo-800 dark:text-indigo-200">
-                        Nhập email user và số tiền cần cộng vào balance.
-                      </div>
+                      <div className="font-semibold">Nạp tiền cho tài khoản</div>
                     </div>
                   </div>
                 </button>
@@ -1097,9 +1094,7 @@ export default function Dashboard() {
             <div className="w-full max-w-xl rounded-2xl border border-slate-200 bg-white shadow-xl">
               <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-5 py-4">
                 <div className="min-w-0">
-                  <div className="truncate text-base font-semibold text-slate-900">
-                    Admin: Nạp tiền
-                  </div>
+                  <div className="truncate text-base font-semibold text-slate-900">Nạp tiền</div>
                 </div>
                 <button
                   type="button"

@@ -15,9 +15,26 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
       ...(init?.headers ?? {}),
     },
   })
-  const data = await res.json().catch(() => null)
+  const rawText = await res.text()
+  let data: unknown = null
+  if (rawText) {
+    try {
+      data = JSON.parse(rawText) as unknown
+    } catch {
+      data = null
+    }
+  }
   if (!res.ok) {
-    const error = (data && (data.error as string)) || 'REQUEST_FAILED'
+    const fromBody =
+      data &&
+      typeof data === 'object' &&
+      data !== null &&
+      typeof (data as { error?: unknown }).error === 'string'
+        ? String((data as { error: string }).error).trim()
+        : ''
+    const error =
+      fromBody ||
+      (res.status === 502 || res.status === 503 || res.status === 504 ? 'API_UNAVAILABLE' : 'REQUEST_FAILED')
     throw new Error(error)
   }
   return data as T

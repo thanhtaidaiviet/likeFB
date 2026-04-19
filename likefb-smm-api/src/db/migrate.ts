@@ -1,4 +1,4 @@
-import 'dotenv/config'
+import '../load-env.js'
 import { getPool } from './pool.js'
 
 const SQL = `

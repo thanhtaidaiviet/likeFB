@@ -11,6 +11,12 @@ function env(name: string) {
   return (import.meta.env[name] as string | undefined) ?? undefined
 }
 
+/** Mở app MoMo (điện thoại). Có thể ghi đè bằng VITE_MOMO_APP_URL nếu MoMo cấp deeplink riêng. */
+function openMomoApp() {
+  const url = (env('VITE_MOMO_APP_URL') || 'momo://').trim() || 'momo://'
+  window.location.assign(url)
+}
+
 async function copyText(text: string) {
   if (navigator.clipboard?.writeText) {
     await navigator.clipboard.writeText(text)
@@ -44,7 +50,6 @@ export default function TopupModal({ open, onClose, userEmail }: TopupModalProps
     const p = notePrefix.trim().replace(/_+$/g, '')
     return `${p}_${loginName}`
   }, [loginName, notePrefix])
-
 
   if (!open) return null
 
@@ -141,7 +146,14 @@ export default function TopupModal({ open, onClose, userEmail }: TopupModalProps
                 </div>
               </div>
 
-              <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:justify-end">
+              <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-end">
+                <button
+                  type="button"
+                  onClick={openMomoApp}
+                  className="inline-flex items-center justify-center rounded-lg bg-[#a50064] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-[#8c0054] sm:order-first"
+                >
+                  Mở app MoMo
+                </button>
                 <button
                   type="button"
                   onClick={onClose}

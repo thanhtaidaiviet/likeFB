@@ -2,7 +2,11 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useAuth } from '../auth/AuthContext'
 
 function friendlyError(code: string) {
-  switch (code) {
+  const c = code.trim()
+  if (c === 'Failed to fetch' || c === 'NetworkError' || /networkerror|load failed/i.test(c)) {
+    return 'Không kết nối được máy chủ. Hãy chạy API (likefb-smm-api, cổng 4000) và dev Vite; kiểm tra proxy /api trong vite.config.'
+  }
+  switch (c) {
     case 'USER_NOT_FOUND':
       return 'Tài khoản không tồn tại.'
     case 'INVALID_PASSWORD':
@@ -23,8 +27,24 @@ function friendlyError(code: string) {
       return 'Dữ liệu không hợp lệ.'
     case 'SERVER_ERROR':
       return 'Lỗi hệ thống. Thử lại sau.'
+    case 'DATABASE_UNAVAILABLE':
+      return 'Không kết nối được PostgreSQL. Bật DB (ví dụ docker compose up), kiểm tra DATABASE_URL trong .env của API, rồi chạy npm run db:migrate trong likefb-smm-api.'
+    case 'MIGRATION_REQUIRED':
+      return 'Cơ sở dữ liệu chưa có bảng users. Trong thư mục likefb-smm-api chạy: npm run db:migrate (PostgreSQL phải đang chạy và DATABASE_URL đúng).'
+    case 'API_UNAVAILABLE':
+    case 'REQUEST_FAILED':
+      return 'API không phản hồi đúng (tắt, sai cổng, hoặc không phải JSON). Chạy song song: npm run dev trong likefb-smm-api và likefb-smm-dashboard.'
+    case 'LOGIN_FAILED':
+    case 'REGISTER_FAILED':
+      return 'Đăng nhập thất bại. Thử lại.'
+    case 'GOOGLE_NOT_CONFIGURED':
+      return 'Đăng nhập Google chưa được cấu hình trên máy chủ (GOOGLE_CLIENT_ID).'
+    case 'INVALID_GOOGLE_TOKEN':
+      return 'Đăng nhập Google không hợp lệ. Thử lại.'
     default:
-      return 'Không thể đăng nhập. Vui lòng thử lại.'
+      return c && c !== 'Error' && !/^error$/i.test(c)
+        ? `Lỗi: ${c}`
+        : 'Không thể đăng nhập. Vui lòng thử lại.'
   }
 }
 
@@ -78,7 +98,6 @@ export default function LoginPage({
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className="text-xl font-semibold">Tài khoản</div>
-          <div className="mt-1 text-sm text-slate-600">Đăng nhập hoặc tạo tài khoản để vào hệ thống.</div>
         </div>
         {variant === 'modal' && onClose ? (
           <button
@@ -146,7 +165,7 @@ export default function LoginPage({
             onChange={(e) => setEmail(e.target.value)}
             type="text"
             autoComplete="username"
-            placeholder="you@example.com (hoặc admin)"
+            placeholder="email@example.com"
             disabled={disabled}
           />
         </label>
@@ -187,7 +206,6 @@ export default function LoginPage({
               placeholder="••••••••"
               disabled={disabled}
             />
-            <div className="text-xs text-slate-500">Mật khẩu tối thiểu 7 ký tự.</div>
           </label>
         ) : null}
 
@@ -201,12 +219,6 @@ export default function LoginPage({
       </form>
 
       <GoogleLoginSection disabled={disabled} />
-
-      <div className="mt-4 text-xs text-slate-500">
-        {mode === 'login'
-          ? 'Nếu bạn đã tạo bằng Google, hãy dùng nút Google để đăng nhập.'
-          : 'Tạo tài khoản bằng email + mật khẩu, hoặc dùng Google để tạo nhanh.'}
-      </div>
     </div>
   )
 
@@ -216,9 +228,6 @@ export default function LoginPage({
     <div className="min-h-screen bg-slate-50 text-slate-900">
       <div className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-4">
         {content}
-        <div className="mt-4 text-center text-xs text-slate-500">
-          Backend: Postgres + JWT
-        </div>
       </div>
     </div>
   )
@@ -286,8 +295,6 @@ function GoogleLoginSection({ disabled }: { disabled: boolean }) {
     }
   }, [loginWithGoogle])
 
-  const hasClientId = Boolean(import.meta.env.VITE_GOOGLE_CLIENT_ID)
-
   return (
     <div className="mt-4">
       <div className="flex items-center gap-3">
@@ -297,13 +304,6 @@ function GoogleLoginSection({ disabled }: { disabled: boolean }) {
         </div>
         <div className="h-px flex-1 bg-slate-200" />
       </div>
-
-      {!hasClientId ? (
-        <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-          Chưa cấu hình Google Client ID. Thêm <span className="font-mono">GOOGLE_CLIENT_ID</span>{' '}
-          vào env (frontend sẽ tự đọc qua Vite).
-        </div>
-      ) : null}
 
       <div
         className={disabled ? 'mt-3 pointer-events-none opacity-60' : 'mt-3'}

@@ -1,4 +1,4 @@
-import 'dotenv/config'
+import './load-env.js'
 import express from 'express'
 import cors from 'cors'
 import { z } from 'zod'
@@ -1169,6 +1169,21 @@ app.post('/api/auth', async (req, res) => {
     } catch (err: any) {
       if (err?.code === '23505') return res.status(409).json({ error: 'EMAIL_EXISTS' })
       console.error(err)
+      const code = String(err?.code || '')
+      const msg = String(err?.message || '')
+      if (/relation ["']users["'] does not exist/i.test(msg) || err?.code === '42P01') {
+        return res.status(503).json({ error: 'MIGRATION_REQUIRED' })
+      }
+      if (
+        code === 'ECONNREFUSED' ||
+        code === 'ENOTFOUND' ||
+        code === 'ETIMEDOUT' ||
+        code === 'ECONNRESET' ||
+        code === 'EPIPE' ||
+        /connect|ECONNREFUSED|certificate|ssl|tls/i.test(msg)
+      ) {
+        return res.status(503).json({ error: 'DATABASE_UNAVAILABLE' })
+      }
       return res.status(500).json({ error: 'SERVER_ERROR' })
     }
   }
@@ -1186,21 +1201,41 @@ app.post('/api/auth', async (req, res) => {
       email = okEmail.data
     }
 
-    const result = await getPool().query(
-      'select id, email, password_hash, balance_vnd from users where email = $1',
-      [email.toLowerCase()],
-    )
-    const row = result.rows[0] as
-      | { id: string; email: string; password_hash: string | null; balance_vnd: string | number }
-      | undefined
-    if (!row) return res.status(404).json({ error: 'USER_NOT_FOUND' })
-    if (!row.password_hash) return res.status(409).json({ error: 'PASSWORD_NOT_SET' })
+    try {
+      const result = await getPool().query(
+        'select id, email, password_hash, balance_vnd from users where email = $1',
+        [email.toLowerCase()],
+      )
+      const row = result.rows[0] as
+        | { id: string; email: string; password_hash: string | null; balance_vnd: string | number }
+        | undefined
+      if (!row) return res.status(404).json({ error: 'USER_NOT_FOUND' })
+      if (!row.password_hash) return res.status(409).json({ error: 'PASSWORD_NOT_SET' })
 
-    const ok = await verifyPassword(password, row.password_hash)
-    if (!ok) return res.status(401).json({ error: 'INVALID_PASSWORD' })
+      const ok = await verifyPassword(password, row.password_hash)
+      if (!ok) return res.status(401).json({ error: 'INVALID_PASSWORD' })
 
-    const token = signAccessToken({ sub: row.id, email: row.email })
-    return res.json({ token, user: { id: row.id, email: row.email, balanceVnd: Number(row.balance_vnd) } })
+      const token = signAccessToken({ sub: row.id, email: row.email })
+      return res.json({ token, user: { id: row.id, email: row.email, balanceVnd: Number(row.balance_vnd) } })
+    } catch (err: any) {
+      console.error(err)
+      const code = String(err?.code || '')
+      const msg = String(err?.message || '')
+      if (/relation ["']users["'] does not exist/i.test(msg) || err?.code === '42P01') {
+        return res.status(503).json({ error: 'MIGRATION_REQUIRED' })
+      }
+      if (
+        code === 'ECONNREFUSED' ||
+        code === 'ENOTFOUND' ||
+        code === 'ETIMEDOUT' ||
+        code === 'ECONNRESET' ||
+        code === 'EPIPE' ||
+        /connect|ECONNREFUSED|certificate|ssl|tls/i.test(msg)
+      ) {
+        return res.status(503).json({ error: 'DATABASE_UNAVAILABLE' })
+      }
+      return res.status(500).json({ error: 'SERVER_ERROR' })
+    }
   }
 
   const clientId = process.env.GOOGLE_CLIENT_ID
