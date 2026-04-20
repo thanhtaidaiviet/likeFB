@@ -101,6 +101,20 @@ alter table free_like_orders add column if not exists error_code text;
 alter table free_like_orders add column if not exists error_detail text;
 
 create index if not exists free_like_orders_user_id_created_at_idx on free_like_orders(user_id, created_at desc);
+
+-- Order status history (append-only). Used for audit + third-party polling.
+create table if not exists order_status_history (
+  id bigserial primary key,
+  order_id uuid not null references orders(id) on delete cascade,
+  smm_order_id text,
+  status_text text,
+  status_raw jsonb,
+  actor text not null default 'system',
+  fetched_at timestamptz not null default now()
+);
+
+create index if not exists order_status_history_order_id_fetched_at_idx
+  on order_status_history(order_id, fetched_at desc);
 `
 
 async function main() {

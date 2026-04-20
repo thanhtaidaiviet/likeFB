@@ -4,6 +4,7 @@ import cors from 'cors'
 import { z } from 'zod'
 import crypto from 'node:crypto'
 import { OAuth2Client } from 'google-auth-library'
+import pg from 'pg'
 import { getPool } from './db/pool.js'
 import { hashPassword, verifyPassword } from './auth/password.js'
 import { signAccessToken, verifyAccessToken } from './auth/jwt.js'
@@ -21,6 +22,25 @@ app.use(express.json())
 app.get('/api/health', (_req, res) => {
   res.json({ ok: true })
 })
+
+function requirePublicApiKey(req: express.Request) {
+  const raw =
+    (typeof req.headers['x-api-key'] === 'string' ? req.headers['x-api-key'] : '') ||
+    (typeof req.headers['x-likefb-api-key'] === 'string' ? req.headers['x-likefb-api-key'] : '') ||
+    ''
+  const provided = raw.trim()
+  const configured = (
+    process.env.PUBLIC_STATUS_API_KEYS ||
+    process.env.PUBLIC_STATUS_API_KEY ||
+    process.env.SMM_API_KEY ||
+    ''
+  ).trim()
+  const allow = configured
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
+  if (!provided || allow.length === 0 || !allow.includes(provided)) throw new Error('UNAUTHORIZED_PUBLIC')
+}
 
 function getBearerToken(req: express.Request) {
   const header = req.headers.authorization
@@ -505,6 +525,30 @@ async function getPanelRateVndPer1k(serviceId: string) {
   return { row, rate: toNumber(row.rate), min: toNumber(row.min), max: toNumber(row.max) }
 }
 
+function pickSmmStatusFromUpstream(data: unknown): string | null {
+  if (!data || typeof data !== 'object') return null
+  const o = data as any
+  const smmStatus = o?.status ?? o?.order?.status ?? o?.data?.status ?? null
+  return smmStatus != null ? String(smmStatus) : null
+}
+
+async function upsertOrderStatusHistory(
+  client: pg.PoolClient,
+  args: {
+    orderId: string
+    smmOrderId: string | null
+    statusText: string | null
+    raw: unknown
+    actor: string
+  },
+) {
+  await client.query(
+    `insert into order_status_history (order_id, smm_order_id, status_text, status_raw, actor)
+     values ($1, $2, $3, $4, $5)`,
+    [args.orderId, args.smmOrderId, args.statusText, JSON.stringify(args.raw), args.actor],
+  )
+}
+
 app.get('/api/smm/services', async (req, res) => {
   try {
     const data = normalizeSmmServicesPayload(await smmRequest({ key: smmApiKey(), action: 'services' }))
@@ -603,12 +647,7 @@ app.post('/api/orders', async (req, res) => {
       order: String(row.smm_order_id),
     })) as any
 
-    const smmStatus =
-      (data && typeof data === 'object' && (data as any).status) ||
-      (data && typeof data === 'object' && (data as any).order && (data as any).order.status) ||
-      null
-
-    const statusText = smmStatus ? String(smmStatus) : null
+    const statusText = pickSmmStatusFromUpstream(data)
 
     const isPartial = statusText && statusText.trim().toLowerCase() === 'partial'
     const refundedAtExisting = (row as any).refunded_at as string | null | undefined
@@ -624,6 +663,14 @@ app.post('/api/orders', async (req, res) => {
        where id = $3 and user_id = $4`,
       [nextStatusText, JSON.stringify(data), row.id, jwt.sub],
     )
+
+    await upsertOrderStatusHistory(client, {
+      orderId: row.id,
+      smmOrderId: row.smm_order_id,
+      statusText: nextStatusText,
+      raw: data,
+      actor: 'user',
+    })
 
     if (isPartial) {
       const sellTotalVnd = Number((row as any).sell_total_vnd ?? 0) || 0
@@ -647,6 +694,14 @@ app.post('/api/orders', async (req, res) => {
            where id = $1 and user_id = $2`,
           [row.id, jwt.sub],
         )
+
+        await upsertOrderStatusHistory(client, {
+          orderId: row.id,
+          smmOrderId: row.smm_order_id,
+          statusText: 'Refunded',
+          raw: { reason: 'partial_refund', upstream: data },
+          actor: 'system',
+        })
       }
     }
 
@@ -1104,6 +1159,140 @@ app.get('/api/orders/history', async (req, res) => {
     const msg = e?.message || 'UNKNOWN'
     if (msg === 'UNAUTHORIZED') return res.status(401).json({ error: 'UNAUTHORIZED' })
     console.error(e)
+    return res.status(500).json({ error: 'SERVER_ERROR', detail: msg })
+  }
+})
+
+app.get('/api/public/orders/:orderId/status', async (req, res) => {
+  const orderId = String(req.params.orderId || '').trim()
+  if (!z.string().uuid().safeParse(orderId).success) return res.status(400).json({ error: 'INVALID_ORDER_ID' })
+
+  const client = await getPool().connect()
+  try {
+    requirePublicApiKey(req)
+    await client.query('begin')
+
+    const r = await client.query(
+      `select id, user_id, smm_order_id, sell_total_vnd, refunded_at, smm_status
+       from orders
+       where id = $1
+       limit 1
+       for update`,
+      [orderId],
+    )
+    const row = r.rows[0] as
+      | {
+          id: string
+          user_id: string
+          smm_order_id: string | null
+          sell_total_vnd: string | number
+          refunded_at: string | null
+          smm_status: string | null
+        }
+      | undefined
+
+    if (!row) return res.status(404).json({ error: 'ORDER_NOT_FOUND' })
+    if (!row.smm_order_id) return res.status(400).json({ error: 'MISSING_SMM_ORDER_ID' })
+
+    const data = (await smmRequest({
+      key: smmApiKey(),
+      action: 'status',
+      order: String(row.smm_order_id),
+    })) as any
+
+    const statusText = pickSmmStatusFromUpstream(data)
+    const refundedAtExisting = row.refunded_at
+    const nextStatusText = refundedAtExisting ? 'Refunded' : statusText
+
+    await client.query(
+      `update orders
+       set smm_status = $1,
+           smm_status_raw = $2,
+           smm_status_updated_at = now()
+       where id = $3`,
+      [nextStatusText, JSON.stringify(data), row.id],
+    )
+
+    await upsertOrderStatusHistory(client, {
+      orderId: row.id,
+      smmOrderId: row.smm_order_id,
+      statusText: nextStatusText,
+      raw: data,
+      actor: 'public',
+    })
+
+    const isPartial = statusText && statusText.trim().toLowerCase() === 'partial'
+    if (isPartial) {
+      const sellTotalVnd = Number(row.sell_total_vnd ?? 0) || 0
+      if (!refundedAtExisting && sellTotalVnd > 0) {
+        await client.query('update users set balance_vnd = balance_vnd + $1 where id = $2', [sellTotalVnd, row.user_id])
+        await client.query(
+          `update orders
+           set refunded_vnd = $1,
+               refunded_at = now(),
+               smm_status = 'Refunded'
+           where id = $2`,
+          [sellTotalVnd, row.id],
+        )
+        await upsertOrderStatusHistory(client, {
+          orderId: row.id,
+          smmOrderId: row.smm_order_id,
+          statusText: 'Refunded',
+          raw: { reason: 'partial_refund', upstream: data },
+          actor: 'system',
+        })
+      }
+    }
+
+    await client.query('commit')
+
+    const finalStatus = isPartial && !refundedAtExisting ? 'Refunded' : refundedAtExisting ? 'Refunded' : statusText
+    return res.json({
+      ok: true,
+      orderId: row.id,
+      smmOrderId: row.smm_order_id,
+      smmStatus: finalStatus,
+      previousStatus: row.smm_status ?? null,
+      fetchedAt: new Date().toISOString(),
+    })
+  } catch (e: any) {
+    await client.query('rollback').catch(() => {})
+    const msg = e?.message || 'UNKNOWN'
+    if (msg === 'UNAUTHORIZED_PUBLIC') return res.status(401).json({ error: 'UNAUTHORIZED' })
+    return res.status(502).json({ error: 'UPSTREAM_OR_SERVER_ERROR', detail: msg })
+  } finally {
+    client.release()
+  }
+})
+
+app.get('/api/public/orders/:orderId/status/history', async (req, res) => {
+  const orderId = String(req.params.orderId || '').trim()
+  if (!z.string().uuid().safeParse(orderId).success) return res.status(400).json({ error: 'INVALID_ORDER_ID' })
+  const limitRaw = typeof req.query.limit === 'string' ? Number(req.query.limit) : NaN
+  const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(1, Math.trunc(limitRaw)), 200) : 50
+
+  try {
+    requirePublicApiKey(req)
+    const r = await getPool().query(
+      `select id, order_id, smm_order_id, status_text, actor, fetched_at
+       from order_status_history
+       where order_id = $1
+       order by fetched_at desc
+       limit $2`,
+      [orderId, limit],
+    )
+    const items = (r.rows as any[]).map((row) => ({
+      id: Number(row.id),
+      orderId: String(row.order_id),
+      smmOrderId: row.smm_order_id ? String(row.smm_order_id) : null,
+      statusText: row.status_text ? String(row.status_text) : null,
+      actor: String(row.actor || ''),
+      fetchedAt: row.fetched_at ? new Date(row.fetched_at).toISOString() : null,
+    }))
+    return res.json({ ok: true, orderId, items, limit })
+  } catch (e: any) {
+    const msg = e?.message || 'UNKNOWN'
+    if (msg === 'UNAUTHORIZED_PUBLIC') return res.status(401).json({ error: 'UNAUTHORIZED' })
     return res.status(500).json({ error: 'SERVER_ERROR', detail: msg })
   }
 })
