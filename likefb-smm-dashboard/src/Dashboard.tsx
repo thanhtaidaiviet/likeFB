@@ -7,7 +7,7 @@ import {
   useState,
 } from 'react'
 import Header from './components/Header'
-import MainNavPanel from './components/MainNavPanel'
+import MainNavPanel, { type NavKey } from './components/MainNavPanel'
 import OrderForm, { type OrderDraft } from './components/OrderForm'
 
 import TopupModal from './components/TopupModal'
@@ -156,6 +156,7 @@ export default function Dashboard() {
     }
   }, [navMenuOpen])
   const [supportNavOpen, setSupportNavOpen] = useState(false)
+  const [activeNavKey, setActiveNavKey] = useState<NavKey>('overview')
   const [lang, setLang] = useState<'vi' | 'en'>('vi')
   const [darkMode, setDarkMode] = useState(false)
   const [balanceVnd, setBalanceVnd] = useState<number>(0)
@@ -180,6 +181,8 @@ export default function Dashboard() {
 
   const [placingOrder, setPlacingOrder] = useState(false)
   const orderSectionRef = useRef<HTMLDivElement | null>(null)
+  const overviewRegionRef = useRef<HTMLDivElement | null>(null)
+  const mainScrollRef = useRef<HTMLElement | null>(null)
   const [kpiLoading, setKpiLoading] = useState(false)
   const [kpiTotalOrders, setKpiTotalOrders] = useState(0)
   const [kpiTotalSpendVnd, setKpiTotalSpendVnd] = useState(0)
@@ -647,13 +650,18 @@ export default function Dashboard() {
   )
 
   const handleMainNav = useCallback(
-    (key: (typeof navMenuItems)[number]['key']) => {
+    (key: NavKey) => {
       if (key === 'support') {
+        setActiveNavKey('support')
         setSupportNavOpen((o) => !o)
+        if (typeof window !== 'undefined' && window.matchMedia('(max-width: 639px)').matches) {
+          setNavMenuOpen(false)
+        }
         return
       }
+      setActiveNavKey(key)
       setSupportNavOpen(false)
-      if (key === 'overview') window.scrollTo({ top: 0, behavior: 'smooth' })
+      if (key === 'overview') mainScrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' })
       if (key === 'newOrder') orderSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
       if (key === 'history') {
         const el = document.getElementById('order-history')
@@ -673,8 +681,39 @@ export default function Dashboard() {
         setNavMenuOpen(false)
       }
     },
-    [openLogin, orderSectionRef, status],
+    [openLogin, status],
   )
+
+  useEffect(() => {
+    const main = mainScrollRef.current
+    const overviewEl = overviewRegionRef.current
+    const orderEl = orderSectionRef.current
+    if (!main || !overviewEl || !orderEl) return
+
+    const historyEl = document.getElementById('order-history')
+    const sections: { key: NavKey; el: Element }[] = [
+      { key: 'overview', el: overviewEl },
+      { key: 'newOrder', el: orderEl },
+    ]
+    if (historyEl) sections.push({ key: 'history', el: historyEl })
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const intersecting = entries.filter((e) => e.isIntersecting && e.intersectionRatio > 0)
+        if (intersecting.length === 0) return
+        const best = intersecting.reduce((a, b) =>
+          a.intersectionRatio >= b.intersectionRatio ? a : b,
+        )
+        const found = sections.find((s) => s.el === best.target)
+        if (!found) return
+        setActiveNavKey(found.key)
+      },
+      { root: main, rootMargin: '-42% 0px -42% 0px', threshold: [0, 0.1, 0.25, 0.5, 0.75, 1] },
+    )
+
+    for (const s of sections) observer.observe(s.el)
+    return () => observer.disconnect()
+  }, [])
 
   const adminTopupEmailTrimmed = adminTopupEmail.trim().toLowerCase()
   const adminTopupEmailValid = Boolean(adminTopupEmailTrimmed) && adminTopupEmailTrimmed.includes('@')
@@ -763,6 +802,7 @@ export default function Dashboard() {
             <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3 sm:max-h-[calc(100vh-4rem)] sm:py-4">
               <MainNavPanel
                 navMenuItems={navMenuItems}
+                activeNavKey={activeNavKey}
                 supportNavOpen={supportNavOpen}
                 supportTelegramUrl={supportTelegramUrl}
                 supportZaloUrl={supportZaloUrl}
@@ -774,8 +814,12 @@ export default function Dashboard() {
           </aside>
         ) : null}
 
-        <main className="min-h-0 min-w-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
+        <main
+          ref={mainScrollRef}
+          className="min-h-0 min-w-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-6 lg:px-8 lg:py-8"
+        >
           <div className="mx-auto w-full max-w-[min(100%,88rem)] space-y-5">
+                <div ref={overviewRegionRef} className="space-y-5">
                 <div className="grid gap-4 lg:grid-cols-[1.6fr_1fr]">
                 <div className="rounded-2xl border border-slate-200 bg-gradient-to-br from-violet-600 via-indigo-600 to-fuchsia-600 p-5 text-white shadow-sm dark:border-slate-800">
                   <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-white/80">
@@ -793,7 +837,10 @@ export default function Dashboard() {
                   <div className="mt-4 flex flex-col gap-2 sm:flex-row">
                     <button
                       type="button"
-                      onClick={() => orderSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+                      onClick={() => {
+                        setActiveNavKey('newOrder')
+                        orderSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                      }}
                       className="inline-flex h-10 items-center justify-center rounded-lg bg-white px-4 text-sm font-semibold text-slate-900 shadow-sm hover:bg-white/90"
                     >
                       Đặt đơn mới
@@ -801,6 +848,7 @@ export default function Dashboard() {
                     <button
                       type="button"
                       onClick={() => {
+                        setActiveNavKey('topup')
                         if (status !== 'authed') return openLogin()
                         setTopupOpen(true)
                       }}
@@ -891,6 +939,7 @@ export default function Dashboard() {
                   </div>
                 </button>
               ) : null}
+                </div>
 
               <div ref={orderSectionRef} className="rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
                 <div className="border-b border-slate-200 px-4 py-3 sm:px-6 dark:border-slate-700">
