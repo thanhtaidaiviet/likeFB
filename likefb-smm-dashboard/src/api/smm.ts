@@ -57,15 +57,6 @@ type AdminTopupResponse = {
   user: { id: string; email: string; balanceVnd: number }
 }
 
-type FreeLikePlaceResponse = {
-  ok: boolean
-  id: string
-  smmOrderId?: string | null
-  smm?: Record<string, unknown>
-  error?: string
-  detail?: string
-}
-
 function pickApiCode(data: any): string | number | null {
   if (!data || typeof data !== 'object') return null
   const candidates = [
@@ -431,16 +422,6 @@ export async function apiSmmServicesPublic() {
 export async function apiPanelServices(token: string) {
   const data = await requestJson<unknown>('/smm/services', token, { method: 'GET' })
   return normalizeSmmServicesJson(data)
-}
-
-export async function apiFreeLikePlace(
-  token: string,
-  body: { platform: string; service: string | number; link: string; quantity: number },
-) {
-  return await requestJson<FreeLikePlaceResponse>('/api/free-like/place', token, {
-    method: 'POST',
-    body: JSON.stringify(body),
-  })
 }
 
 export async function apiOrdersCheckStatus(token: string, body: { orderId: string }) {

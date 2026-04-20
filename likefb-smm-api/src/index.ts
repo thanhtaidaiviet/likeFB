@@ -860,14 +860,6 @@ const adminActionSchema = z.discriminatedUnion('action', [
       amountVnd: z.number().finite(),
     })
     .strict(),
-  z
-    .object({
-      action: z.literal('freeLikeHistory'),
-      limit: z.number().optional(),
-      offset: z.number().optional(),
-      platform: z.string().optional(),
-    })
-    .strict(),
 ])
 
 function normalizeTopupAmountVnd(n: number) {
@@ -909,162 +901,12 @@ app.post('/api/admin', async (req, res) => {
         amountVnd,
       })
     }
-
-    // body.action === 'freeLikeHistory'
-    const limitRaw = body.limit != null ? Number(body.limit) : NaN
-    const offsetRaw = body.offset != null ? Number(body.offset) : NaN
-    const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(1, Math.trunc(limitRaw)), 100) : 20
-    const offset = Number.isFinite(offsetRaw) ? Math.min(Math.max(0, Math.trunc(offsetRaw)), 1_000_000) : 0
-    const platformRaw = body.platform != null ? String(body.platform).trim() : ''
-    const platform = platformRaw && platformRaw !== 'All' ? platformRaw : ''
-
-    const whereParts: string[] = []
-    const args: any[] = []
-    if (platform) {
-      args.push(platform)
-      whereParts.push(`f.platform = $${args.length}`)
-    }
-    args.push(limit, offset)
-    const limitArg = `$${args.length - 1}`
-    const offsetArg = `$${args.length}`
-
-    const r = await getPool().query(
-      `
-      select
-        f.id,
-        u.email as user_email,
-        f.platform,
-        f.smm_service_id,
-        f.link,
-        f.quantity,
-        f.smm_order_id,
-        f.smm_status,
-        f.created_at,
-        count(*) over()::int as total
-      from free_like_orders f
-      join users u on u.id = f.user_id
-      ${whereParts.length ? `where ${whereParts.join(' and ')}` : ''}
-      order by f.created_at desc
-      limit ${limitArg}
-      offset ${offsetArg}
-      `,
-      args,
-    )
-
-    const total = Number((r.rows?.[0] as any)?.total ?? 0) || 0
-    const items = (r.rows as any[]).map((row) => ({
-      id: String(row.id),
-      userEmail: String(row.user_email || ''),
-      platform: String(row.platform || ''),
-      serviceId: String(row.smm_service_id || ''),
-      link: String(row.link || ''),
-      quantity: Number(row.quantity) || 0,
-      smmOrderId: row.smm_order_id ? String(row.smm_order_id) : null,
-      smmStatus: row.smm_status ? String(row.smm_status) : null,
-      createdAt: row.created_at ? new Date(row.created_at).toISOString() : null,
-    }))
-
-    return res.json({ ok: true, items, limit, offset, total })
   } catch (e: any) {
     const msg = e?.message || 'UNKNOWN'
     if (msg === 'UNAUTHORIZED') return res.status(401).json({ error: 'UNAUTHORIZED' })
     if (msg === 'FORBIDDEN') return res.status(403).json({ error: 'FORBIDDEN' })
     console.error(e)
     return res.status(500).json({ error: 'SERVER_ERROR', detail: msg })
-  }
-})
-
-const freeLikeSchema = z
-  .object({
-    platform: z.string().min(1).max(50),
-    service: z.union([z.string(), z.number()]),
-    link: z.string().min(1),
-    quantity: z.number().int().positive().max(100_000_000),
-  })
-  .strict()
-
-app.post('/api/free-like/place', async (req, res) => {
-  const client = await getPool().connect()
-  try {
-    const jwt = requireUser(req)
-    const parsed = freeLikeSchema.safeParse(req.body)
-    if (!parsed.success) return res.status(400).json({ error: 'INVALID_INPUT' })
-
-    const platform = String(parsed.data.platform)
-    const serviceId = String(parsed.data.service)
-    const link = String(parsed.data.link).trim()
-    const qty = parsed.data.quantity
-
-    const params: Record<string, string> = {
-      key: smmApiKey(),
-      action: 'add',
-      service: serviceId,
-      link,
-      quantity: String(qty),
-    }
-
-    let upstream: any = null
-    let smmOrderId: string | null = null
-    let errorCode: string | null = null
-    let errorDetail: string | null = null
-
-    try {
-      upstream = (await smmRequest(params)) as any
-      smmOrderId =
-        upstream && typeof upstream === 'object' && 'order' in upstream ? String((upstream as any).order) : null
-    } catch (e: any) {
-      errorDetail = String(e?.message || 'SMM_FAILED')
-      errorCode = String(errorDetail).startsWith('SMM_ERROR:') ? 'SMM_ERROR' : 'SMM_FAILED'
-    }
-
-    const id = crypto.randomUUID()
-    const initialSmmStatus = smmOrderId ? 'running' : 'Pending'
-    await client.query('begin')
-    await client.query(
-      `insert into free_like_orders
-        (id, user_id, platform, smm_service_id, link, quantity, smm_order_id, smm_status, error_code, error_detail)
-       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
-      [
-        id,
-        jwt.sub,
-        platform,
-        serviceId,
-        link,
-        qty,
-        smmOrderId,
-        initialSmmStatus,
-        errorCode,
-        errorDetail,
-      ],
-    )
-    await client.query('commit')
-
-    const userEmail = (jwt as any).email ? String((jwt as any).email) : 'unknown'
-    const msgLines = [
-      `🎁 Free-like: ${id}`,
-      `User: ${userEmail}`,
-      `Platform: ${platform}`,
-      `Service: ${serviceId}`,
-      `Qty: ${qty.toLocaleString('vi-VN')}`,
-      `Link: ${link}`,
-      smmOrderId ? `SMM: ${smmOrderId}` : null,
-      errorDetail ? `Error: ${errorDetail}` : null,
-    ].filter(Boolean) as string[]
-    telegramSendMessage(msgLines.join('\n')).catch((e) => console.error('telegram:', e?.message || e))
-
-    if (errorDetail) {
-      return res.status(400).json({ ok: false, id, error: 'SMM_REJECTED', detail: errorDetail, smmOrderId })
-    }
-
-    return res.json({ ok: true, id, smmOrderId, smm: upstream })
-  } catch (e: any) {
-    await client.query('rollback').catch(() => {})
-    const msg = e?.message || 'UNKNOWN'
-    if (msg === 'UNAUTHORIZED') return res.status(401).json({ error: 'UNAUTHORIZED' })
-    console.error(e)
-    return res.status(500).json({ error: 'SERVER_ERROR', detail: msg })
-  } finally {
-    client.release()
   }
 })
 

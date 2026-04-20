@@ -13,7 +13,7 @@ import OrderForm, { type OrderDraft } from './components/OrderForm'
 import TopupModal from './components/TopupModal'
 import UserPanel from './components/UserPanel'
 import { useAuth } from './auth/AuthContext'
-import { apiAdminTopup, apiFreeLikePlace, apiOrdersHistory, apiOrdersPlace, apiSmmServicesPublic } from './api/smm'
+import { apiAdminTopup, apiOrdersHistory, apiOrdersPlace, apiSmmServicesPublic } from './api/smm'
 import { SERVICE_OVERRIDES } from './servicesOverrides'
 import { useToast } from './ui/toast'
 
@@ -114,13 +114,6 @@ function formatVnd(n: number) {
   return n.toLocaleString('vi-VN') + ' ₫'
 }
 
-const FREE_LIKE_SERVICES: Record<string, string> = {
-  // 4042 is listed by panel but rejects `action=add` (Service ID does not exists)
-  Facebook: '4122',
-  TikTok: '4876',
-  Instagram: '4874',
-}
-
 const ADMIN_EMAIL = 'adminlike@gmail.com'
 
 export default function Dashboard() {
@@ -164,14 +157,6 @@ export default function Dashboard() {
   const [servicesError, setServicesError] = useState<string | null>(null)
   const [servicesLoading, setServicesLoading] = useState(false)
   const [topupOpen, setTopupOpen] = useState(false)
-  const [freeLikeOpen, setFreeLikeOpen] = useState(false)
-  const [freePlatform, setFreePlatform] = useState<Platform>('')
-  const [freeServiceId, setFreeServiceId] = useState<string>('4042')
-  const [freeQty, setFreeQty] = useState<number>(10)
-  const [freeLink, setFreeLink] = useState<string>('')
-  const [freeLikeBusy, setFreeLikeBusy] = useState(false)
-  const [freeLinkTouched, setFreeLinkTouched] = useState(false)
-  const freeLinkInputRef = useRef<HTMLInputElement | null>(null)
   const [adminTopupOpen, setAdminTopupOpen] = useState(false)
   const [adminTopupEmail, setAdminTopupEmail] = useState('')
   const [adminTopupEmailTouched, setAdminTopupEmailTouched] = useState(false)
@@ -356,16 +341,6 @@ export default function Dashboard() {
   useEffect(() => {
     if (!services.length) return
     const firstPlatform = services[0].platform
-    setFreePlatform((cur) => {
-      if (cur) return cur
-      const allowed = ['Facebook', 'TikTok', 'Instagram'] as Platform[]
-      const firstByServiceId =
-        allowed.find((p) => {
-          const id = FREE_LIKE_SERVICES[String(p)]
-          return id ? services.some((s) => s.id === id) : false
-        }) ?? null
-      return firstByServiceId ?? firstPlatform
-    })
     setDraft((d) =>
       d.platform
         ? d
@@ -441,51 +416,6 @@ export default function Dashboard() {
     }
     return list
   }, [services])
-
-  const freePlatforms = useMemo<Platform[]>(() => {
-    const allowed = ['Facebook', 'TikTok', 'Instagram'] as Platform[]
-    return allowed.filter((p) => {
-      const id = FREE_LIKE_SERVICES[String(p)]
-      if (!id) return false
-      return services.some((s) => s.id === id)
-    })
-  }, [services])
-
-  const freePlatformOptions = useMemo(() => {
-    return freePlatforms.map((p) => {
-      const id = FREE_LIKE_SERVICES[String(p)]
-      const svc = id ? services.find((s) => s.id === id) ?? null : null
-      const label = p
-      return { platform: p, serviceId: id || '', label, service: svc }
-    })
-  }, [freePlatforms, services])
-
-  useEffect(() => {
-    if (!services.length) return
-    if (!freePlatforms.length) return
-    // Ensure selected platform is one of the allowed free-like platforms.
-    if (freePlatform && freePlatforms.includes(freePlatform)) return
-    setFreePlatform(freePlatforms[0])
-  }, [freePlatform, freePlatforms, services.length])
-
-  const freeServiceForPlatform = useMemo(() => {
-    const serviceId = FREE_LIKE_SERVICES[String(freePlatform)] || ''
-    if (!serviceId) return null
-    return services.find((s) => s.id === serviceId) ?? null
-  }, [freePlatform, services])
-
-  useEffect(() => {
-    if (!services.length) return
-    if (!freePlatform) return
-    const mapped = FREE_LIKE_SERVICES[String(freePlatform)]
-    if (!mapped) return
-    setFreeServiceId(mapped)
-  }, [freePlatform, services.length])
-
-  useEffect(() => {
-    if (!freeServiceForPlatform) return
-    setFreeQty(freeServiceForPlatform.min)
-  }, [freeServiceForPlatform])
 
   // Sidebar removed.
 
@@ -570,50 +500,6 @@ export default function Dashboard() {
       })
     } finally {
       setPlacingOrder(false)
-    }
-  }
-
-  async function handleFreeLikeSubmit() {
-    if (!token) return openLogin()
-    if (freeLikeBusy) return
-    if (!freePlatform) {
-      // eslint-disable-next-line no-alert
-      alert('Vui lòng chọn nền tảng.')
-      return
-    }
-    if (!freeServiceId || !freeServiceForPlatform) {
-      // eslint-disable-next-line no-alert
-      alert('Không tìm thấy dịch vụ theo nền tảng. Vui lòng thử lại sau.')
-      return
-    }
-    setFreeLinkTouched(true)
-    const link = freeLink.trim()
-    if (!link) {
-      freeLinkInputRef.current?.focus()
-      return
-    }
-    const qty = Number.isFinite(freeQty) ? freeQty : freeServiceForPlatform.min
-    try {
-      setFreeLikeBusy(true)
-      const res = await apiFreeLikePlace(token, { platform: freePlatform, service: freeServiceId, link, quantity: qty })
-      setFreeLink('')
-      setFreeLikeOpen(false)
-      setFreeLinkTouched(false)
-      toast({
-        kind: 'success',
-        title: 'Tăng like miễn phí thành công',
-        description: `Service ${freeServiceId} • SL ${qty.toLocaleString('vi-VN')} • Mã: ${res.smmOrderId ?? '—'}`,
-        durationMs: 4500,
-      })
-    } catch (e: any) {
-      toast({
-        kind: 'error',
-        title: 'Tăng like miễn phí thất bại',
-        description: String(e?.message || 'SMM_ADD_FAILED'),
-        durationMs: 6000,
-      })
-    } finally {
-      setFreeLikeBusy(false)
     }
   }
 
@@ -995,152 +881,6 @@ export default function Dashboard() {
         onClose={() => setTopupOpen(false)}
         userEmail={status === 'authed' ? user?.email : undefined}
       />
-
-      {freeLikeOpen ? (
-        <div className="fixed inset-0 z-[45]">
-          <div
-            className="absolute inset-0 bg-slate-900/40"
-            onClick={() => setFreeLikeOpen(false)}
-            role="button"
-            tabIndex={0}
-            aria-label="Đóng"
-          />
-          <div className="absolute inset-0 flex items-center justify-center p-4">
-            <div className="w-full max-w-2xl rounded-2xl border border-slate-200 bg-white shadow-xl">
-              <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-5 py-4">
-                <div className="min-w-0">
-                  <div className="truncate text-base font-semibold text-slate-900">
-                    Tăng like
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setFreeLikeOpen(false)}
-                  className="inline-flex size-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-800 hover:bg-slate-50"
-                  aria-label="Đóng"
-                >
-                  ×
-                </button>
-              </div>
-
-              <div className="grid gap-4 p-5 md:grid-cols-2">
-                <div>
-                  <div className="text-xs font-semibold uppercase tracking-wide text-slate-600">
-                    Nền tảng
-                  </div>
-                  <select
-                    value={freePlatform}
-                    onChange={(e) => setFreePlatform(e.target.value as Platform)}
-                    className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm shadow-sm outline-none focus:ring-2 focus:ring-emerald-500"
-                  >
-                    {servicesLoading ? (
-                      <option value="" disabled>
-                        Đang tải...
-                      </option>
-                    ) : freePlatformOptions.length ? (
-                      freePlatformOptions.map((opt) => (
-                        <option key={opt.platform} value={opt.platform}>
-                          {opt.label}
-                        </option>
-                      ))
-                    ) : (
-                      <option value="" disabled>
-                        Không có nền tảng miễn phí
-                      </option>
-                    )}
-                  </select>
-                </div>
-
-                <div>
-                  <div className="text-xs font-semibold uppercase tracking-wide text-slate-600">
-                    Dịch vụ
-                  </div>
-                  <input
-                    value={
-                      servicesLoading
-                        ? 'Đang tải dịch vụ...'
-                        : freeServiceForPlatform
-                          ? `${freeServiceForPlatform.id} - ${freeServiceForPlatform.name}`
-                          : freeServiceId
-                            ? `Không tìm thấy service ${freeServiceId} từ API`
-                            : '—'
-                    }
-                    disabled
-                    className="mt-1 h-10 w-full cursor-not-allowed rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 shadow-sm outline-none"
-                  />
-                  {freeServiceForPlatform ? (
-                    <div className="mt-1 text-xs text-slate-500">
-                      SL mặc định (min):{' '}
-                      <span className="font-semibold">
-                        {freeServiceForPlatform.min.toLocaleString('vi-VN')}
-                      </span>
-                    </div>
-                  ) : null}
-                </div>
-
-                <div className="md:col-span-2">
-                  <div className="text-xs font-semibold uppercase tracking-wide text-slate-600">
-                    Link cần tăng
-                  </div>
-                  <input
-                    value={freeLink}
-                    ref={freeLinkInputRef}
-                    onChange={(e) => {
-                      setFreeLink(e.target.value)
-                      if (!freeLinkTouched) setFreeLinkTouched(true)
-                    }}
-                    onBlur={() => setFreeLinkTouched(true)}
-                    placeholder="https://..."
-                    disabled={!freePlatform || !freeServiceForPlatform}
-                    className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm shadow-sm outline-none focus:ring-2 focus:ring-emerald-500"
-                  />
-                  {!freePlatform || !freeServiceForPlatform ? (
-                    <div className="mt-1 text-xs text-slate-500">
-                      Vui lòng chọn nền tảng (và dịch vụ hợp lệ) trước khi nhập link.
-                    </div>
-                  ) : freeLinkTouched && !freeLink.trim() ? (
-                    <div className="mt-1 text-xs font-semibold text-rose-700">
-                      Bắt buộc nhập link cần tăng.
-                    </div>
-                  ) : null}
-                </div>
-
-                <div className="md:col-span-2">
-                  <div className="text-xs font-semibold uppercase tracking-wide text-slate-600">
-                    Số lượng
-                  </div>
-                  <input
-                    value={freeQty}
-                    disabled
-                    className="mt-1 h-10 w-full cursor-not-allowed rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 shadow-sm outline-none"
-                  />
-                </div>
-              </div>
-
-              <div className="flex flex-col gap-2 border-t border-slate-200 px-5 py-4 sm:flex-row sm:justify-end">
-                <button
-                  type="button"
-                  onClick={() => setFreeLikeOpen(false)}
-                  className="inline-flex h-10 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-800 hover:bg-slate-50"
-                >
-                  Đóng
-                </button>
-                <button
-                  type="button"
-                  onClick={handleFreeLikeSubmit}
-                  disabled={freeLikeBusy}
-                  className={[
-                    'inline-flex h-10 items-center justify-center rounded-lg px-4 text-sm font-semibold shadow-sm transition disabled:cursor-not-allowed disabled:opacity-60',
-                    freeLikeBusy ? 'bg-emerald-400 text-white' : 'bg-emerald-600 text-white hover:bg-emerald-700',
-                  ].join(' ')}
-                >
-                  {freeLikeBusy ? 'Đang tăng...' : 'Tăng like'}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      ) : null}
 
       {adminTopupOpen ? (
         <div className="fixed inset-0 z-[46]">

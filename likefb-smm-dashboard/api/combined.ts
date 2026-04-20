@@ -70,11 +70,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return
   }
 
-  if (/^(orders|free-like\/place|admin)/.test(path)) {
+  if (/^(orders|admin)/.test(path)) {
     return sendJson(res, 503, {
       error: 'MISSING_UPSTREAM_API',
       detail:
-        'Add env LIKEFB_SMM_API_BASE_URL (origin of likefb-smm-api, no trailing slash) on this Vercel project so orders, admin, and free-like routes are proxied.',
+        'Add env LIKEFB_SMM_API_BASE_URL (origin of likefb-smm-api, no trailing slash) on this Vercel project so orders and admin routes are proxied.',
       path,
       method,
     })
