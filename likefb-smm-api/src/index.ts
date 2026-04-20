@@ -23,6 +23,204 @@ app.get('/api/health', (_req, res) => {
   res.json({ ok: true })
 })
 
+function serverBaseUrlFromReq(req: express.Request) {
+  const proto = (req.headers['x-forwarded-proto'] as string | undefined) || req.protocol || 'http'
+  const host = (req.headers['x-forwarded-host'] as string | undefined) || req.headers.host || 'localhost'
+  return `${proto}://${host}`
+}
+
+app.get('/api/openapi.json', (req, res) => {
+  const base = serverBaseUrlFromReq(req)
+  const spec = {
+    openapi: '3.0.3',
+    info: {
+      title: 'likefb-smm-api',
+      version: '1.0.0',
+    },
+    servers: [{ url: base }],
+    components: {
+      securitySchemes: {
+        bearerAuth: { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' },
+        apiKeyAuth: { type: 'apiKey', in: 'header', name: 'x-api-key' },
+      },
+      schemas: {
+        Error: {
+          type: 'object',
+          properties: {
+            error: { type: 'string' },
+            detail: { type: 'string', nullable: true },
+          },
+          required: ['error'],
+        },
+      },
+    },
+    paths: {
+      '/api/health': {
+        get: {
+          summary: 'Health check',
+          responses: { '200': { description: 'OK' } },
+        },
+      },
+      '/api/smm/services': {
+        get: {
+          summary: 'List SMM services (from panel)',
+          responses: { '200': { description: 'Services list' }, '502': { description: 'Upstream error' } },
+        },
+      },
+      '/api/smm/status': {
+        get: {
+          summary: 'Check upstream order status by SMM order id',
+          description:
+            'Server-to-server helper. If Authorization Bearer is provided, requires a valid user session; otherwise requires x-api-key matching SMM_API_KEY.',
+          parameters: [
+            { name: 'order', in: 'query', required: true, schema: { type: 'string' }, example: '23501' },
+          ],
+          security: [{ bearerAuth: [] }, { apiKeyAuth: [] }],
+          responses: {
+            '200': { description: 'Status result' },
+            '400': { description: 'Invalid input', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+            '401': { description: 'Unauthorized', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+            '502': { description: 'Upstream error', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          },
+        },
+      },
+      '/api/orders': {
+        post: {
+          summary: 'Orders actions (quote/place/checkStatus)',
+          security: [{ bearerAuth: [] }],
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  oneOf: [
+                    { type: 'object', additionalProperties: false, required: ['action', 'service', 'quantity'], properties: { action: { const: 'quote' }, service: { oneOf: [{ type: 'string' }, { type: 'number' }] }, quantity: { type: 'integer', minimum: 1 } } },
+                    { type: 'object', additionalProperties: false, required: ['action', 'service', 'link', 'quantity'], properties: { action: { const: 'place' }, service: { oneOf: [{ type: 'string' }, { type: 'number' }] }, link: { type: 'string' }, quantity: { type: 'integer', minimum: 1 }, comments: { type: 'string' } } },
+                    { type: 'object', additionalProperties: false, required: ['action', 'orderId'], properties: { action: { const: 'checkStatus' }, orderId: { type: 'string', format: 'uuid' } } },
+                  ],
+                },
+              },
+            },
+          },
+          responses: {
+            '200': { description: 'OK' },
+            '201': { description: 'Created' },
+            '400': { description: 'Invalid input' },
+            '401': { description: 'Unauthorized' },
+            '402': { description: 'Insufficient funds' },
+            '404': { description: 'Not found' },
+            '500': { description: 'Server error' },
+            '502': { description: 'Upstream error' },
+          },
+        },
+      },
+      '/api/orders/history': {
+        get: {
+          summary: 'Get order history (paginated)',
+          security: [{ bearerAuth: [] }],
+          parameters: [
+            { name: 'limit', in: 'query', required: false, schema: { type: 'integer', minimum: 1, maximum: 50 } },
+            { name: 'offset', in: 'query', required: false, schema: { type: 'integer', minimum: 0 } },
+            { name: 'from', in: 'query', required: false, schema: { type: 'string' } },
+            { name: 'to', in: 'query', required: false, schema: { type: 'string' } },
+          ],
+          responses: { '200': { description: 'Orders list' }, '401': { description: 'Unauthorized' } },
+        },
+      },
+      '/api/admin': {
+        post: {
+          summary: 'Admin actions (topup)',
+          security: [{ bearerAuth: [] }],
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  additionalProperties: false,
+                  required: ['action', 'email', 'amountVnd'],
+                  properties: {
+                    action: { const: 'topup' },
+                    email: { type: 'string', format: 'email' },
+                    amountVnd: { type: 'number' },
+                  },
+                },
+              },
+            },
+          },
+          responses: { '200': { description: 'OK' }, '401': { description: 'Unauthorized' }, '403': { description: 'Forbidden' } },
+        },
+      },
+      '/api/auth': {
+        post: {
+          summary: 'Auth (register/login/google)',
+          requestBody: { required: true, content: { 'application/json': { schema: { type: 'object' } } } },
+          responses: { '200': { description: 'OK' }, '201': { description: 'Created' }, '400': { description: 'Invalid input' } },
+        },
+      },
+      '/api/auth/me': {
+        get: {
+          summary: 'Get current user',
+          security: [{ bearerAuth: [] }],
+          responses: { '200': { description: 'OK' }, '401': { description: 'Unauthorized' } },
+        },
+      },
+      '/api/public/orders/{orderId}/status': {
+        get: {
+          summary: 'Public: poll order status + write history',
+          parameters: [{ name: 'orderId', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
+          security: [{ apiKeyAuth: [] }],
+          responses: { '200': { description: 'OK' }, '401': { description: 'Unauthorized' }, '404': { description: 'Not found' } },
+        },
+      },
+      '/api/public/orders/{orderId}/status/history': {
+        get: {
+          summary: 'Public: get status history',
+          parameters: [
+            { name: 'orderId', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } },
+            { name: 'limit', in: 'query', required: false, schema: { type: 'integer', minimum: 1, maximum: 200 } },
+          ],
+          security: [{ apiKeyAuth: [] }],
+          responses: { '200': { description: 'OK' }, '401': { description: 'Unauthorized' } },
+        },
+      },
+    },
+  }
+  return res.json(spec)
+})
+
+app.get('/api/docs', (req, res) => {
+  const base = serverBaseUrlFromReq(req)
+  const openapiUrl = `${base}/api/openapi.json`
+  const html = `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>likefb-smm-api docs</title>
+    <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css" />
+    <style>
+      body { margin: 0; background: #0b1220; }
+      #swagger-ui { background: white; }
+    </style>
+  </head>
+  <body>
+    <div id="swagger-ui"></div>
+    <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+    <script>
+      window.ui = SwaggerUIBundle({
+        url: ${JSON.stringify(openapiUrl)},
+        dom_id: '#swagger-ui',
+        deepLinking: true,
+        persistAuthorization: true
+      });
+    </script>
+  </body>
+</html>`
+  res.setHeader('content-type', 'text/html; charset=utf-8')
+  return res.status(200).send(html)
+})
+
 function requirePublicApiKey(req: express.Request) {
   const raw =
     (typeof req.headers['x-api-key'] === 'string' ? req.headers['x-api-key'] : '') ||
