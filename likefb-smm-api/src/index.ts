@@ -559,6 +559,41 @@ app.get('/api/smm/services', async (req, res) => {
   }
 })
 
+/**
+ * Server-to-server helper: check upstream panel status by SMM order id (e.g. 23501).
+ * Auth:
+ * - If Authorization Bearer is provided: requires valid user session.
+ * - Otherwise: requires `x-api-key` (or `x-likefb-api-key`) matching SMM_API_KEY.
+ */
+app.get('/api/smm/status', async (req, res) => {
+  const order = typeof req.query.order === 'string' ? req.query.order.trim() : ''
+  if (!order) return res.status(400).json({ error: 'INVALID_INPUT', detail: 'Missing query param: order' })
+
+  const hasBearer = typeof req.headers.authorization === 'string' && req.headers.authorization.trim().toLowerCase().startsWith('bearer ')
+  try {
+    if (hasBearer) requireUser(req)
+    else requirePublicApiKey(req)
+
+    const data = (await smmRequest({
+      key: smmApiKey(),
+      action: 'status',
+      order: String(order),
+    })) as any
+
+    return res.json({
+      ok: true,
+      order: String(order),
+      status: pickSmmStatusFromUpstream(data),
+      raw: data,
+    })
+  } catch (e: any) {
+    const msg = e?.message || 'UNKNOWN'
+    if (msg === 'UNAUTHORIZED') return res.status(401).json({ error: 'UNAUTHORIZED' })
+    if (msg === 'UNAUTHORIZED_PUBLIC') return res.status(401).json({ error: 'UNAUTHORIZED' })
+    return res.status(502).json({ error: 'SMM_UPSTREAM_ERROR', detail: msg })
+  }
+})
+
 const ordersActionSchema = z.discriminatedUnion('action', [
   z
     .object({
