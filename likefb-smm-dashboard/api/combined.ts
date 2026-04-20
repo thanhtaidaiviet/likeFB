@@ -58,15 +58,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const path = getApiPath(req)
   const method = (req.method || 'GET').toUpperCase()
 
-  const upstream = upstreamBaseFromEnv()
-  if (upstream) {
-    await proxyUpstream(upstream, path, req, res)
-    return
-  }
-
   const sub = localRoutes[path]?.[method]
   if (sub) {
     await sub(req, res)
+    return
+  }
+
+  const upstream = upstreamBaseFromEnv()
+  if (upstream) {
+    await proxyUpstream(upstream, path, req, res)
     return
   }
 
