@@ -127,6 +127,8 @@ export default function Dashboard() {
   const { status, user, token, logout, openLogin } = useAuth()
   const { toast } = useToast()
   const [navMenuOpen, setNavMenuOpen] = useState(false)
+  const menuButtonRef = useRef<HTMLButtonElement | null>(null)
+  const prevNavMenuOpenRef = useRef(false)
 
   useLayoutEffect(() => {
     const syncDesktopDefault = () => setNavMenuOpen(window.innerWidth >= 640)
@@ -144,6 +146,14 @@ export default function Dashboard() {
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
+  }, [navMenuOpen])
+
+  useEffect(() => {
+    const prev = prevNavMenuOpenRef.current
+    prevNavMenuOpenRef.current = navMenuOpen
+    if (prev && !navMenuOpen) {
+      menuButtonRef.current?.focus()
+    }
   }, [navMenuOpen])
   const [supportNavOpen, setSupportNavOpen] = useState(false)
   const [lang, setLang] = useState<'vi' | 'en'>('vi')
@@ -729,6 +739,7 @@ export default function Dashboard() {
           isAuthed={status === 'authed'}
           menuOpen={navMenuOpen}
           onMenuClick={() => setNavMenuOpen((v) => !v)}
+          menuButtonRef={menuButtonRef}
           onLoginClick={openLogin}
           onLogoutClick={logout}
           lang={lang}
@@ -757,6 +768,7 @@ export default function Dashboard() {
                 supportZaloUrl={supportZaloUrl}
                 onNavKey={(key) => handleMainNav(key)}
                 ariaLabel="Điều hướng chính"
+                autoFocusFirstItem={navMenuOpen}
               />
             </div>
           </aside>

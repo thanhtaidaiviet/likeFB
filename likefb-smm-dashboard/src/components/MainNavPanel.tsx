@@ -9,6 +9,7 @@ export default function MainNavPanel({
   supportZaloUrl,
   onNavKey,
   ariaLabel,
+  autoFocusFirstItem,
 }: {
   navMenuItems: NavMenuItem[]
   supportNavOpen: boolean
@@ -16,6 +17,7 @@ export default function MainNavPanel({
   supportZaloUrl: string
   onNavKey(key: NavKey): void
   ariaLabel: string
+  autoFocusFirstItem?: boolean
 }) {
   return (
     <div className="rounded-2xl border border-slate-200/90 bg-gradient-to-b from-white to-slate-50/80 p-3 shadow-sm ring-1 ring-slate-200/50 dark:border-slate-700 dark:from-slate-900 dark:to-slate-950/90 dark:ring-slate-700/60">
@@ -28,6 +30,7 @@ export default function MainNavPanel({
             <button
               type="button"
               onClick={() => onNavKey(it.key)}
+              autoFocus={Boolean(autoFocusFirstItem && idx === 0)}
               className={[
                 'group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold transition',
                 idx === 0

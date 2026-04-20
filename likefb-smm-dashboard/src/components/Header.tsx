@@ -6,6 +6,7 @@ export default function Header({
   isAuthed,
   menuOpen,
   onMenuClick,
+  menuButtonRef,
   onLoginClick,
   onLogoutClick,
   lang,
@@ -17,6 +18,7 @@ export default function Header({
   isAuthed: boolean
   menuOpen: boolean
   onMenuClick?(): void
+  menuButtonRef?: React.Ref<HTMLButtonElement>
   onLoginClick(): void
   onLogoutClick(): void
   lang: 'vi' | 'en'
@@ -54,6 +56,7 @@ export default function Header({
           <button
             type="button"
             onClick={onMenuClick}
+            ref={menuButtonRef}
             className="inline-flex size-10 shrink-0 items-center justify-center rounded-lg border border-indigo-200 bg-white text-slate-800 shadow-sm transition hover:bg-indigo-50/80 dark:border-indigo-500/40 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800"
             aria-label={menuOpen ? 'Đóng menu' : 'Mở menu'}
             aria-expanded={menuOpen}

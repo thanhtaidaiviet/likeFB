@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: likefb-smm-api
+    runtime: node
+    plan: free
+    rootDir: likefb-smm-api
+    buildCommand: npm ci && npm run build
+    startCommand: npm run start
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: 20
+      - key: PORT
+        value: 4000
+      # The rest must be set in Render dashboard (sync from your secrets vault):
+      # DATABASE_URL, DATABASE_SSL, JWT_SECRET, JWT_EXPIRES_IN, PASSWORD_PEPPER,
+      # GOOGLE_CLIENT_ID, SMM_API_URL, SMM_API_KEY, SMM_COOKIE, TELEGRAM_*
