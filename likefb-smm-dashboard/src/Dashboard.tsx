@@ -172,6 +172,7 @@ export default function Dashboard() {
   )
   const [freeLink, setFreeLink] = useState('')
   const [freeBusy, setFreeBusy] = useState(false)
+  const freeLikeSectionRef = useRef<HTMLDivElement | null>(null)
   const orderSectionRef = useRef<HTMLDivElement | null>(null)
   const overviewRegionRef = useRef<HTMLDivElement | null>(null)
   const mainScrollRef = useRef<HTMLElement | null>(null)
@@ -579,6 +580,7 @@ export default function Dashboard() {
     const vi = [
       { key: 'overview' as const, label: 'Tổng quan' },
       { key: 'newOrder' as const, label: 'Đặt đơn mới' },
+      { key: 'freeLike' as const, label: 'Tăng Like Miễn Phí' },
       { key: 'history' as const, label: 'Lịch sử đơn hàng' },
       { key: 'topup' as const, label: 'Nạp tiền' },
       { key: 'support' as const, label: 'Hỗ trợ' },
@@ -586,6 +588,7 @@ export default function Dashboard() {
     const en = [
       { key: 'overview' as const, label: 'Overview' },
       { key: 'newOrder' as const, label: 'New order' },
+      { key: 'freeLike' as const, label: 'Free likes' },
       { key: 'history' as const, label: 'Order history' },
       { key: 'topup' as const, label: 'Top up' },
       { key: 'support' as const, label: 'Support' },
@@ -619,6 +622,9 @@ export default function Dashboard() {
       setSupportNavOpen(false)
       if (key === 'overview') mainScrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' })
       if (key === 'newOrder') orderSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      if (key === 'freeLike') {
+        freeLikeSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }
       if (key === 'history') {
         const el = document.getElementById('order-history')
         if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
@@ -651,6 +657,7 @@ export default function Dashboard() {
       { key: 'overview', el: overviewEl },
       { key: 'newOrder', el: orderEl },
     ]
+    if (freeLikeSectionRef.current) sections.push({ key: 'freeLike', el: freeLikeSectionRef.current })
     if (historyEl) sections.push({ key: 'history', el: historyEl })
 
     const observer = new IntersectionObserver(
@@ -817,6 +824,16 @@ export default function Dashboard() {
                     >
                       Nạp tiền
                     </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const el = freeLikeSectionRef.current
+                        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                      }}
+                      className="inline-flex h-10 items-center justify-center rounded-lg border border-white/30 bg-white/10 px-4 text-sm font-semibold text-white hover:bg-white/15"
+                    >
+                      Tăng Like Miễn Phí
+                    </button>
                   </div>
                 </div>
 
@@ -836,8 +853,9 @@ export default function Dashboard() {
 
               <div className="grid gap-4 sm:grid-cols-3">
                 <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900">
-                  <div className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                    Tổng đơn hàng
+                  <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                    <img src="/logo.svg" alt="LikeTikTok.xyz" className="size-4" />
+                    <span>Tổng đơn hàng</span>
                   </div>
                   <div className="mt-1 text-2xl font-extrabold text-slate-900 dark:text-slate-50">
                     {kpiLoading ? '—' : kpiTotalOrders.toLocaleString('vi-VN')}
@@ -845,8 +863,9 @@ export default function Dashboard() {
                   <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">Từ trước đến nay</div>
                 </div>
                 <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900">
-                  <div className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                    Tổng chi tiêu
+                  <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                    <img src="/logo.svg" alt="LikeTikTok.xyz" className="size-4" />
+                    <span>Tổng chi tiêu</span>
                   </div>
                   <div className="mt-1 text-2xl font-extrabold text-slate-900 dark:text-slate-50">
                     {kpiLoading ? '—' : formatVnd(kpiTotalSpendVnd)}
@@ -854,8 +873,9 @@ export default function Dashboard() {
                   <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">Toàn thời gian</div>
                 </div>
                 <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900">
-                  <div className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                    Đang xử lý
+                  <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                    <img src="/logo.svg" alt="LikeTikTok.xyz" className="size-4" />
+                    <span>Đang xử lý</span>
                   </div>
                   <div className="mt-1 text-2xl font-extrabold text-slate-900 dark:text-slate-50">
                     {kpiLoading ? '—' : kpiProcessing.toLocaleString('vi-VN')}
@@ -942,7 +962,10 @@ export default function Dashboard() {
                 </div>
               </div>
 
-              <div className="rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
+              <div
+                ref={freeLikeSectionRef}
+                className="rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900"
+              >
                 <div className="border-b border-slate-200 px-4 py-3 sm:px-6 dark:border-slate-700">
                   <div className="flex items-center gap-2 text-base font-semibold text-slate-900 dark:text-slate-50">
                     <img src="/logo.svg" alt="LikeTikTok.xyz" className="size-5" />
@@ -1024,7 +1047,7 @@ export default function Dashboard() {
                         disabled={freeBusy}
                         onClick={() => void handleFreeLikeSubmit()}
                         className={[
-                          'inline-flex h-11 items-center justify-center rounded-lg px-5 text-sm font-semibold shadow-sm transition',
+                          'inline-flex h-10 items-center justify-center rounded-lg px-4 text-xs font-extrabold shadow-sm transition sm:h-11 sm:px-5 sm:text-sm sm:font-semibold',
                           freeBusy
                             ? 'cursor-not-allowed bg-indigo-400 text-white'
                             : 'bg-indigo-600 text-white hover:bg-indigo-700',

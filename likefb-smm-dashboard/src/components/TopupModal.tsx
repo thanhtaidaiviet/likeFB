@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useToast } from '../ui/toast'
 
 type TopupModalProps = {
@@ -35,6 +35,7 @@ async function copyText(text: string) {
 
 export default function TopupModal({ open, onClose, userEmail }: TopupModalProps) {
   const { toast } = useToast()
+  const [tab, setTab] = useState<'qr' | 'transfer'>('qr')
 
   const momoName = env('VITE_MOMO_NAME') || 'Nguyễn Quốc Cường'
   const qrUrl = env('VITE_MOMO_QR_IMAGE_URL') || '/momo-qr.png'
@@ -84,89 +85,116 @@ export default function TopupModal({ open, onClose, userEmail }: TopupModalProps
             </button>
           </div>
 
-          <div className="min-h-0 overflow-y-auto">
+          <div className="border-b border-slate-200/70 px-4 py-2 sm:hidden">
+            <div className="grid grid-cols-2 rounded-xl border border-slate-200 bg-slate-50 p-1 text-xs font-extrabold text-slate-700">
+              <button
+                type="button"
+                onClick={() => setTab('qr')}
+                className={tab === 'qr' ? 'h-9 rounded-lg bg-white shadow-sm' : 'h-9 rounded-lg hover:bg-white/60'}
+              >
+                QR
+              </button>
+              <button
+                type="button"
+                onClick={() => setTab('transfer')}
+                className={tab === 'transfer' ? 'h-9 rounded-lg bg-white shadow-sm' : 'h-9 rounded-lg hover:bg-white/60'}
+              >
+                Chuyển khoản
+              </button>
+            </div>
+          </div>
+
+          <div className="min-h-0 flex-1 overflow-y-auto">
             <div className="grid gap-4 p-4 sm:gap-5 sm:p-5 md:grid-cols-[280px_1fr]">
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-              <div className="text-xs font-semibold uppercase tracking-wide text-slate-600">
-                QR MoMo
+              {/* QR */}
+              <div className={tab === 'transfer' ? 'hidden sm:block' : ''}>
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                  <div className="text-xs font-semibold uppercase tracking-wide text-slate-600">
+                    QR MoMo
+                  </div>
+                  <div className="mt-2 overflow-hidden rounded-xl bg-white">
+                    {qrUrl ? (
+                      <img
+                        src={qrUrl}
+                        alt="QR MoMo"
+                        className="h-auto max-h-[44vh] w-full object-contain md:max-h-none"
+                        loading="lazy"
+                      />
+                    ) : (
+                      <div className="grid aspect-square place-items-center p-4 text-center text-sm text-slate-600">
+                        Chưa cấu hình QR.
+                        <div className="mt-1 text-xs text-slate-500">
+                          Set <span className="font-semibold">VITE_MOMO_QR_IMAGE_URL</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
-              <div className="mt-2 overflow-hidden rounded-xl bg-white">
-                {qrUrl ? (
-                  <img
-                    src={qrUrl}
-                    alt="QR MoMo"
-                    className="h-auto max-h-[44vh] w-full object-contain md:max-h-none"
-                    loading="lazy"
-                  />
-                ) : (
-                  <div className="grid aspect-square place-items-center p-4 text-center text-sm text-slate-600">
-                    Chưa cấu hình QR.
-                    <div className="mt-1 text-xs text-slate-500">
-                      Set <span className="font-semibold">VITE_MOMO_QR_IMAGE_URL</span>
+
+              {/* Transfer */}
+              <div className={tab === 'qr' ? 'hidden sm:block' : ''}>
+                <div className="min-w-0">
+                  <div className="rounded-xl border border-slate-200 p-4">
+                    <div className="text-sm font-semibold text-slate-900">Thông tin chuyển khoản</div>
+                    <div className="mt-3 grid gap-3 text-sm">
+                      <Field
+                        label="Người nhận"
+                        value={momoName}
+                        onCopy={async () => {
+                          await copyText(momoName)
+                          toast({
+                            kind: 'success',
+                            title: 'Đã copy',
+                            description: 'Tên người nhận',
+                            durationMs: 2500,
+                          })
+                        }}
+                      />
+                      <Field
+                        label="Nội dung"
+                        value={transferNote}
+                        valueClassName="font-extrabold text-rose-700"
+                        onCopy={async () => {
+                          await copyText(transferNote)
+                          toast({
+                            kind: 'success',
+                            title: 'Đã copy',
+                            description: 'Nội dung chuyển khoản',
+                            durationMs: 2500,
+                          })
+                        }}
+                      />
                     </div>
                   </div>
-                )}
-              </div>
-            </div>
 
-            <div className="min-w-0">
-              <div className="rounded-xl border border-slate-200 p-4">
-                <div className="text-sm font-semibold text-slate-900">Thông tin chuyển khoản</div>
-                <div className="mt-3 grid gap-3 text-sm">
-                  <Field
-                    label="Người nhận"
-                    value={momoName}
-                    onCopy={async () => {
-                      await copyText(momoName)
-                      toast({
-                        kind: 'success',
-                        title: 'Đã copy',
-                        description: 'Tên người nhận',
-                        durationMs: 2500,
-                      })
-                    }}
-                  />
-                  <Field
-                    label="Nội dung"
-                    value={transferNote}
-                    valueClassName="font-extrabold text-rose-700"
-                    onCopy={async () => {
-                      await copyText(transferNote)
-                      toast({
-                        kind: 'success',
-                        title: 'Đã copy',
-                        description: 'Nội dung chuyển khoản',
-                        durationMs: 2500,
-                      })
-                    }}
-                  />
+                  <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-amber-950">
+                    <div className="text-sm font-semibold">Lưu ý</div>
+                    <div className="mt-1 text-sm text-amber-900">
+                      Vui lòng nhập đúng <span className="font-semibold">Nội dung</span> để hệ thống đối soát nhanh.
+                    </div>
+                  </div>
                 </div>
               </div>
-
-              <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-amber-950">
-                <div className="text-sm font-semibold">Lưu ý</div>
-                <div className="mt-1 text-sm text-amber-900">
-                  Vui lòng nhập đúng <span className="font-semibold">Nội dung</span> để hệ thống đối soát nhanh.
-                </div>
-              </div>
-
-              <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-end">
-                <button
-                  type="button"
-                  onClick={openMomoApp}
-                  className="inline-flex items-center justify-center rounded-lg bg-[#a50064] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-[#8c0054] sm:order-first"
-                >
-                  Mở app MoMo
-                </button>
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50"
-                >
-                  Đóng
-                </button>
-              </div>
             </div>
+          </div>
+
+          <div className="border-t border-slate-200 bg-white px-4 py-3 sm:px-5">
+            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-end">
+              <button
+                type="button"
+                onClick={openMomoApp}
+                className="inline-flex items-center justify-center rounded-lg bg-[#a50064] px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-[#8c0054] sm:order-first"
+              >
+                Mở app MoMo
+              </button>
+              <button
+                type="button"
+                onClick={onClose}
+                className="inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 hover:bg-slate-50"
+              >
+                Đóng
+              </button>
             </div>
           </div>
         </div>
@@ -191,17 +219,17 @@ function Field({
   return (
     <div className="grid grid-cols-1 items-start gap-2 sm:grid-cols-[110px_1fr_auto] sm:gap-3">
       <div className="text-xs font-semibold uppercase tracking-wide text-slate-500 sm:pt-1">{label}</div>
-      <div className="min-w-0 text-sm font-semibold text-slate-800 sm:pt-0.5">
-        <span className={['break-words whitespace-normal', valueClassName || ''].join(' ')}>
-          {value}
-        </span>
+      <div className="min-w-0 sm:pt-0.5">
+        <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800">
+          <span className={['break-words whitespace-normal', valueClassName || ''].join(' ')}>{value}</span>
+        </div>
       </div>
       <button
         type="button"
         onClick={onCopy}
         disabled={Boolean(disabled)}
         className={[
-          'inline-flex h-9 w-full items-center justify-center rounded-lg border px-3 text-xs font-semibold sm:h-8 sm:w-auto',
+          'inline-flex h-10 w-full items-center justify-center rounded-lg border px-3 text-xs font-semibold sm:h-8 sm:w-auto',
           disabled
             ? 'cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400'
             : 'border-slate-200 bg-white text-slate-800 hover:bg-slate-50',
