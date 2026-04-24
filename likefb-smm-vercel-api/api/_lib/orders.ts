@@ -329,7 +329,7 @@ export async function handlePlace(args: {
   }
 }
 
-export async function handleFreeLike(args: { userId: string; platform: string; link: string }) {
+export async function handleFreeLike(args: { userId: string | null; platform: string; link: string }) {
   const SERVICE_BY_PLATFORM: Record<string, string> = {
     Facebook: '4122',
     TikTok: '4876',
@@ -342,82 +342,108 @@ export async function handleFreeLike(args: { userId: string; platform: string; l
   const serviceId = String(SERVICE_BY_PLATFORM[args.platform] || '').trim()
   if (!serviceId) return { status: 400, body: { error: 'SERVICE_NOT_CONFIGURED' } }
 
+  // Limit: 3 free-like orders per user per 7 days.
+  if (args.userId) {
+    const r = await getPool().query(
+      `select count(*)::int as c
+       from free_like_orders
+       where user_id = $1
+         and created_at >= (now() - interval '7 days')`,
+      [args.userId],
+    )
+    const used = Number((r.rows?.[0] as any)?.c ?? 0) || 0
+    if (used >= 3) {
+      return {
+        status: 429,
+        body: {
+          error: 'FREE_LIKE_LIMIT',
+          detail: 'Mỗi user chỉ được MIỄN PHÍ 3 lần /1 tuần',
+          limit: 3,
+          windowDays: 7,
+          used,
+        },
+      }
+    }
+  }
+
   const info = await getPanelRateVndPer1k(serviceId)
   if (!info) return { status: 404, body: { error: 'SERVICE_NOT_FOUND' } }
 
   const qty = Math.max(1, Math.trunc(Number(info.min) || 1))
   const link = args.link.trim()
 
-  const client = await getPool().connect()
+  const id = crypto.randomUUID()
+
+  let upstream: any = null
+  let smmOrderId: string | null = null
+  let errorCode: string | null = null
+  let errorDetail: string | null = null
+  let smmStatus: string | null = 'Pending'
+
   try {
-    const id = crypto.randomUUID()
-    await client.query('begin')
+    upstream = (await smmRequest({
+      key: smmApiKey(),
+      action: 'add',
+      service: serviceId,
+      link,
+      quantity: String(qty),
+    })) as any
+    smmOrderId = upstream && typeof upstream === 'object' && 'order' in upstream ? String((upstream as any).order) : null
+    smmStatus = smmOrderId ? 'running' : 'Pending'
+  } catch (e: any) {
+    errorDetail = String(e?.message || 'SMM_FAILED')
+    errorCode = String(errorDetail).startsWith('SMM_ERROR:') ? 'SMM_ERROR' : 'SMM_FAILED'
+    smmStatus = 'rejected'
+  }
 
-    let upstream: any = null
-    let smmOrderId: string | null = null
-    let errorCode: string | null = null
-    let errorDetail: string | null = null
-    let smmStatus: string | null = 'Pending'
-
+  // If logged in, save to DB for tracking. If guest, just return upstream result.
+  if (args.userId) {
+    const client = await getPool().connect()
     try {
-      upstream = (await smmRequest({
-        key: smmApiKey(),
-        action: 'add',
-        service: serviceId,
-        link,
-        quantity: String(qty),
-      })) as any
-      smmOrderId = upstream && typeof upstream === 'object' && 'order' in upstream ? String((upstream as any).order) : null
-      smmStatus = smmOrderId ? 'running' : 'Pending'
-    } catch (e: any) {
-      errorDetail = String(e?.message || 'SMM_FAILED')
-      errorCode = String(errorDetail).startsWith('SMM_ERROR:') ? 'SMM_ERROR' : 'SMM_FAILED'
-      smmStatus = 'rejected'
+      await client.query('begin')
+      await client.query(
+        `insert into free_like_orders
+          (id, user_id, platform, smm_service_id, link, quantity, smm_order_id, smm_status, smm_status_raw, error_code, error_detail)
+         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+        [
+          id,
+          args.userId,
+          args.platform,
+          serviceId,
+          link,
+          qty,
+          smmOrderId,
+          smmStatus,
+          upstream ? JSON.stringify(upstream) : null,
+          errorCode,
+          errorDetail,
+        ],
+      )
+      await client.query('commit')
+    } catch (e) {
+      await client.query('rollback').catch(() => {})
+      throw e
+    } finally {
+      client.release()
     }
+  }
 
-    await client.query(
-      `insert into free_like_orders
-        (id, user_id, platform, smm_service_id, link, quantity, smm_order_id, smm_status, smm_status_raw, error_code, error_detail)
-       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
-      [
-        id,
-        args.userId,
-        args.platform,
-        serviceId,
-        link,
-        qty,
-        smmOrderId,
-        smmStatus,
-        upstream ? JSON.stringify(upstream) : null,
-        errorCode,
-        errorDetail,
-      ],
-    )
+  if (smmStatus === 'rejected') {
+    return { status: 400, body: { ok: false, error: 'SMM_REJECTED', detail: errorDetail } }
+  }
 
-    await client.query('commit')
-
-    if (smmStatus === 'rejected') {
-      return { status: 400, body: { ok: false, error: 'SMM_REJECTED', detail: errorDetail } }
-    }
-
-    return {
-      status: 200,
-      body: {
-        ok: true,
-        free: true,
-        orderId: id,
-        platform: args.platform,
-        serviceId,
-        quantity: qty,
-        smmOrderId,
-        smmStatus,
-      },
-    }
-  } catch (e) {
-    await client.query('rollback').catch(() => {})
-    throw e
-  } finally {
-    client.release()
+  return {
+    status: 200,
+    body: {
+      ok: true,
+      free: true,
+      orderId: id,
+      platform: args.platform,
+      serviceId,
+      quantity: qty,
+      smmOrderId,
+      smmStatus,
+    },
   }
 }
 

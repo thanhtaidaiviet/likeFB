@@ -24,9 +24,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!parsed.success) return sendJson(res, 400, { error: 'INVALID_INPUT' })
 
   try {
-    const jwt = requireUser(req)
-
     const body = parsed.data
+    // Allow free-like without login.
+    if (body.action === 'freeLike') {
+      let userId: string | null = null
+      try {
+        const jwt = requireUser(req)
+        userId = jwt.sub
+      } catch (e: any) {
+        const msg = String(e?.message || '')
+        if (msg !== 'UNAUTHORIZED') throw e
+      }
+      const out = await handleFreeLike({ userId, platform: body.platform, link: body.link })
+      return sendJson(res, out.status, out.body)
+    }
+
+    const jwt = requireUser(req)
     if (body.action === 'quote') {
       const out = await handleQuote({ userId: jwt.sub, service: body.service, quantity: body.quantity })
       return sendJson(res, out.status, out.body)
@@ -34,11 +47,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (body.action === 'checkStatus') {
       const out = await handleCheckStatus({ userId: jwt.sub, orderId: body.orderId })
-      return sendJson(res, out.status, out.body)
-    }
-
-    if (body.action === 'freeLike') {
-      const out = await handleFreeLike({ userId: jwt.sub, platform: body.platform, link: body.link })
       return sendJson(res, out.status, out.body)
     }
 

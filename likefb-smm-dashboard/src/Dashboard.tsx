@@ -433,6 +433,25 @@ export default function Dashboard() {
   }, [])
 
   const freeServiceId = freeServiceIdByPlatform[freePlatform]
+  const freeAllowedServiceIds = useMemo(() => {
+    const ids = new Set<string>(['4122', '4876', '4874', '4430'])
+    const ig = freeServiceIdByPlatform.Instagram
+    if (ig) ids.add(ig)
+    return ids
+  }, [freeServiceIdByPlatform.Instagram])
+
+  const freeServicesForUi = useMemo(() => {
+    const svcId = freeServiceId
+    if (!svcId) return []
+    const found = services.find((s) => s.id === svcId)
+    return found ? [found] : []
+  }, [freeServiceId, services])
+
+  const freeSelectedService = useMemo(() => {
+    if (!freeServiceId) return null
+    return services.find((s) => s.id === freeServiceId) ?? null
+  }, [freeServiceId, services])
+
   const freeMinQty = useMemo(() => {
     if (!freeServiceId) return 0
     const svc = services.find((s) => s.id === freeServiceId) || null
@@ -440,7 +459,6 @@ export default function Dashboard() {
   }, [freeServiceId, services])
 
   async function handleFreeLikeSubmit() {
-    if (!token) return openLogin()
     if (freeBusy) return
     if (!freeLink.trim()) {
       toast({ kind: 'error', title: 'Thiếu thông tin', description: 'Vui lòng nhập Link cần tăng.', durationMs: 3500 })
@@ -894,7 +912,10 @@ export default function Dashboard() {
 
               <div ref={orderSectionRef} className="rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
                 <div className="border-b border-slate-200 px-4 py-3 sm:px-6 dark:border-slate-700">
-                  <div className="text-base font-semibold text-slate-900 dark:text-slate-50">Đặt dịch vụ SMM</div>
+                  <div className="flex items-center gap-2">
+                    <img src="/logo.svg" alt="LikeTikTok.xyz" className="size-6" />
+                    <div className="text-base font-semibold text-slate-900 dark:text-slate-50">Dịch vụ LikeTikTok</div>
+                  </div>
                   <div className="mt-1 text-sm text-slate-600 dark:text-slate-300">
                     Chọn nền tảng, phân loại và dịch vụ phù hợp.
                   </div>
@@ -956,6 +977,37 @@ export default function Dashboard() {
 
                     <div>
                       <div className="text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-400">
+                        Dịch vụ
+                      </div>
+                      <select
+                        value={freeServiceId || ''}
+                        disabled
+                        className="mt-1 h-10 w-full cursor-not-allowed rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold shadow-sm outline-none opacity-80 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                      >
+                        {freeServicesForUi.length ? (
+                          freeServicesForUi.map((s) => (
+                            <option key={s.id} value={s.id}>
+                              {s.id} • {s.name}
+                            </option>
+                          ))
+                        ) : (
+                          <option value="" disabled>
+                            {freeServiceId
+                              ? `Service ${freeServiceId} chưa tải được từ danh sách`
+                              : freePlatform === 'Instagram'
+                                ? 'Chưa cấu hình service Instagram'
+                                : '—'}
+                          </option>
+                        )}
+                      </select>
+                      <div className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                        Chỉ hiển thị các dịch vụ miễn phí cố định:{' '}
+                        {Array.from(freeAllowedServiceIds).sort().join(', ')}
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-400">
                         Link cần tăng
                       </div>
                       <input
@@ -972,14 +1024,6 @@ export default function Dashboard() {
                       <div className="grid grid-cols-2 gap-3">
                         <div>
                           <div className="text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-400">
-                            Dịch vụ
-                          </div>
-                          <div className="mt-1 h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold leading-10 text-slate-800 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
-                            {freeServiceId || '—'}
-                          </div>
-                        </div>
-                        <div>
-                          <div className="text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-400">
                             Số lượng (Min)
                           </div>
                           <input
@@ -987,6 +1031,16 @@ export default function Dashboard() {
                             disabled
                             className="mt-1 h-10 w-full cursor-not-allowed rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-800 opacity-80 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                           />
+                        </div>
+                        <div>
+                          <div className="text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-400">
+                            Giới hạn
+                          </div>
+                          <div className="mt-1 h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold leading-10 text-slate-800 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
+                            {freeSelectedService
+                              ? `Min ${freeSelectedService.min.toLocaleString('vi-VN')} • Max ${freeSelectedService.max.toLocaleString('vi-VN')}`
+                              : '—'}
+                          </div>
                         </div>
                       </div>
 

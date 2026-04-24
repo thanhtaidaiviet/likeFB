@@ -508,10 +508,16 @@ export async function apiOrdersPlace(
 }
 
 export async function apiFreeLike(
-  token: string,
+  token: string | null | undefined,
   body: { platform: 'Facebook' | 'TikTok' | 'Instagram' | 'YouTube' | 'Telegram'; link: string },
 ) {
-  return await requestJson<FreeLikeResponse>('/api/orders', token, {
+  if (token) {
+    return await requestJson<FreeLikeResponse>('/api/orders', token, {
+      method: 'POST',
+      body: JSON.stringify({ action: 'freeLike', ...body }),
+    })
+  }
+  return await requestJsonPublic<FreeLikeResponse>('/api/orders', {
     method: 'POST',
     body: JSON.stringify({ action: 'freeLike', ...body }),
   })
