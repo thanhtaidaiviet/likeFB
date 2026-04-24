@@ -62,6 +62,16 @@ const localRoutes: Record<string, Partial<Record<string, H>>> = {
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
+    // CORS for calling api.* from dashboard (www.*)
+    res.setHeader('access-control-allow-origin', '*')
+    res.setHeader('access-control-allow-methods', 'GET,POST,OPTIONS')
+    res.setHeader('access-control-allow-headers', 'authorization,content-type,x-api-key,x-likefb-api-key')
+    res.setHeader('access-control-max-age', '86400')
+    if ((req.method || '').toUpperCase() === 'OPTIONS') {
+      res.status(204).send('')
+      return
+    }
+
     const path = getApiPath(req)
     const method = (req.method || 'GET').toUpperCase()
 

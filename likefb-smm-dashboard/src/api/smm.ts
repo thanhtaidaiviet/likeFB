@@ -57,6 +57,20 @@ type AdminTopupResponse = {
   user: { id: string; email: string; balanceVnd: number }
 }
 
+function apiBase(): string {
+  const raw = (import.meta as any)?.env?.VITE_API_BASE_URL
+  if (typeof raw !== 'string') return ''
+  return raw.trim().replace(/\/+$/, '')
+}
+
+function withApiBase(path: string): string {
+  const base = apiBase()
+  if (!base) return path
+  if (/^https?:\/\//i.test(path)) return path
+  if (!path.startsWith('/')) return `${base}/${path}`
+  return `${base}${path}`
+}
+
 function pickApiCode(data: any): string | number | null {
   if (!data || typeof data !== 'object') return null
   const candidates = [
@@ -337,7 +351,7 @@ function formatRequestFailedMessage(opts: {
 async function requestJson<T>(path: string, token: string, init?: RequestInit): Promise<T> {
   let res: Response
   try {
-    res = await fetch(path, {
+    res = await fetch(withApiBase(path), {
       ...init,
       headers: {
         'Content-Type': 'application/json',
@@ -376,7 +390,7 @@ async function requestJson<T>(path: string, token: string, init?: RequestInit): 
 async function requestJsonPublic<T>(path: string, init?: RequestInit): Promise<T> {
   let res: Response
   try {
-    res = await fetch(path, {
+    res = await fetch(withApiBase(path), {
       ...init,
       headers: {
         'Content-Type': 'application/json',
