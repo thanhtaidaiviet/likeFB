@@ -98,7 +98,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (msg === 'UNAUTHORIZED') return sendJson(res, 401, { error: 'UNAUTHORIZED' })
     const hint = describeDbError(err)
     console.error(err)
-    return sendJson(res, 500, { error: 'SERVER_ERROR', hint })
+    const status =
+      hint.kind === 'config' || hint.kind === 'network' || hint.kind === 'timeout'
+        ? 503
+        : hint.kind === 'pg' && hint.code === '42P01'
+          ? 503
+          : 500
+    const detail =
+      hint.kind === 'pg' && hint.code === '42P01'
+        ? 'DB is missing table(s). Run migrations (likefb-smm-api/src/db/migrate.ts) against DATABASE_URL.'
+        : hint.kind === 'config'
+          ? hint.message || 'Database is not configured.'
+          : hint.kind === 'network' || hint.kind === 'timeout'
+            ? hint.message || 'Database connection failed.'
+            : hint.message || null
+    return sendJson(res, status, { error: 'SERVER_ERROR', detail, hint })
   }
 }
 
