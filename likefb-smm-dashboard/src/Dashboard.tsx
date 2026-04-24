@@ -532,16 +532,6 @@ export default function Dashboard() {
     return username ? `https://t.me/${username}` : 'https://t.me/'
   }, [])
 
-  const hotline = useMemo(() => {
-    const raw = import.meta.env.VITE_HOTLINE as string | undefined
-    return raw && raw.trim() ? raw.trim() : undefined
-  }, [])
-
-  const apiResellerUrl = useMemo(() => {
-    const raw = import.meta.env.VITE_API_RESELLER_URL as string | undefined
-    return raw && raw.trim() ? raw.trim() : undefined
-  }, [])
-
   const supportZaloUrl = useMemo(
     () => (import.meta.env.VITE_ZALO_SUPPORT_URL as string | undefined) || 'https://zalo.me/',
     [],
@@ -679,13 +669,6 @@ export default function Dashboard() {
           menuButtonRef={menuButtonRef}
           onLoginClick={openLogin}
           onLogoutClick={logout}
-          onTopupClick={() => {
-            if (status !== 'authed') return openLogin()
-            setTopupOpen(true)
-          }}
-          supportTelegramUrl={supportTelegramUrl}
-          hotline={hotline}
-          apiResellerUrl={apiResellerUrl}
           lang={lang}
           onLangChange={setLang}
           darkMode={darkMode}
