@@ -43,6 +43,19 @@ type OrdersHistoryResponse = {
   }[]
 }
 
+type OrdersSummaryResponse = {
+  ok: boolean
+  limit: number
+  offset: number
+  total: number
+  orders: OrdersHistoryResponse['orders']
+  kpi: {
+    totalOrders: number
+    totalSpendVnd: number
+    processing: number
+  }
+}
+
 type OrdersCheckStatusResponse = {
   ok: boolean
   orderId: string
@@ -492,6 +505,19 @@ export async function apiOrdersHistory(
   if (params?.to) usp.set('to', String(params.to))
   const suffix = usp.toString() ? `?${usp.toString()}` : ''
   return await requestJson<OrdersHistoryResponse>(`/api/orders/history${suffix}`, token, { method: 'GET' })
+}
+
+export async function apiOrdersSummary(
+  token: string,
+  params?: { limit?: number; offset?: number; from?: string; to?: string },
+) {
+  const usp = new URLSearchParams()
+  if (params?.limit != null) usp.set('limit', String(params.limit))
+  if (params?.offset != null) usp.set('offset', String(params.offset))
+  if (params?.from) usp.set('from', String(params.from))
+  if (params?.to) usp.set('to', String(params.to))
+  const suffix = usp.toString() ? `?${usp.toString()}` : ''
+  return await requestJson<OrdersSummaryResponse>(`/api/orders/summary${suffix}`, token, { method: 'GET' })
 }
 
 export async function apiAdminTopup(token: string, body: { email: string; amountVnd: number }) {

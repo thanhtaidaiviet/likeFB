@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { apiOrdersCheckStatus, apiOrdersHistory } from '../api/smm'
+import { apiOrdersCheckStatus, apiOrdersSummary } from '../api/smm'
+import { loadLocalOrders, type LocalOrderRow } from '../localOrders'
 
 export default function UserPanel({
   userId: _userId,
@@ -34,6 +35,7 @@ export default function UserPanel({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [checkingOrderId, setCheckingOrderId] = useState<string | null>(null)
+  const [useLocalHistory, setUseLocalHistory] = useState(false)
 
   function formatDateTime(iso: string | null) {
     if (!iso) return '—'
@@ -106,6 +108,18 @@ export default function UserPanel({
   }
 
   async function load(next?: { page?: number; pageSize?: number }) {
+    if (useLocalHistory) {
+      const nextPageSize = next?.pageSize ?? pageSize
+      const nextPage = Math.max(1, Math.trunc(next?.page ?? page))
+      const offset = (nextPage - 1) * nextPageSize
+      const all = loadLocalOrders()
+      const slice = all.slice(offset, offset + nextPageSize)
+      setOrders(slice)
+      setTotal(all.length)
+      setPage(nextPage)
+      setPageSize(nextPageSize)
+      return
+    }
     if (!isAuthed || !token) return
     const nextPageSize = next?.pageSize ?? pageSize
     const nextPage = Math.max(1, Math.trunc(next?.page ?? page))
@@ -114,7 +128,7 @@ export default function UserPanel({
     setLoading(true)
     setError(null)
     try {
-      const res = await apiOrdersHistory(token, {
+      const res = await apiOrdersSummary(token, {
         limit: nextPageSize,
         offset,
       })
@@ -131,6 +145,7 @@ export default function UserPanel({
 
   async function checkStatus(row: { id: string; smmOrderId: string | null }) {
     if (!token) return
+    if (useLocalHistory) return
     if (!row.smmOrderId) return
     if (checkingOrderId) return
 
@@ -149,25 +164,45 @@ export default function UserPanel({
   useEffect(() => {
     let cancelled = false
     if (!isAuthed || !token) {
-      setOrders([])
-      setError(null)
+      const local = loadLocalOrders()
+      if (local.length) {
+        setUseLocalHistory(true)
+        setOrders(local.slice(0, pageSize))
+        setTotal(local.length)
+        setPage(1)
+        setError(null)
+      } else {
+        setOrders([])
+        setTotal(0)
+        setError(null)
+      }
       return
     }
     ;(async () => {
       setLoading(true)
       setError(null)
       try {
-        const res = await apiOrdersHistory(token, {
+        const res = await apiOrdersSummary(token, {
           limit: pageSize,
           offset: 0,
         })
         if (cancelled) return
+        setUseLocalHistory(false)
         setOrders(res.orders || [])
         setTotal(Number(res.total) || 0)
         setPage(1)
       } catch (e: any) {
         if (cancelled) return
-        setError(String(e?.message || 'ORDERS_HISTORY_FAILED'))
+        const local = loadLocalOrders()
+        if (local.length) {
+          setUseLocalHistory(true)
+          setOrders(local.slice(0, pageSize))
+          setTotal(local.length)
+          setPage(1)
+          setError(null)
+        } else {
+          setError(String(e?.message || 'ORDERS_HISTORY_FAILED'))
+        }
       } finally {
         if (cancelled) return
         setLoading(false)
@@ -206,7 +241,9 @@ export default function UserPanel({
         </div>
 
         {!isAuthed ? (
-          <div className="mt-2 text-sm text-slate-600 dark:text-slate-300">Đăng nhập để xem lịch sử.</div>
+          <div className="mt-2 text-sm text-slate-600 dark:text-slate-300">
+            {useLocalHistory ? 'Đang hiển thị lịch sử trên máy này.' : 'Đăng nhập để xem lịch sử.'}
+          </div>
         ) : error ? (
           <div className="mt-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-900">
             Lỗi: {error}

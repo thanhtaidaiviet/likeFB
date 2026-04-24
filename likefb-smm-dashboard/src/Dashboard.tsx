@@ -13,9 +13,10 @@ import OrderForm, { type OrderDraft } from './components/OrderForm'
 import TopupModal from './components/TopupModal'
 import UserPanel from './components/UserPanel'
 import { useAuth } from './auth/AuthContext'
-import { apiAdminTopup, apiOrdersHistory, apiOrdersPlace, apiSmmServicesPublic } from './api/smm'
+import { apiAdminTopup, apiOrdersPlace, apiOrdersSummary, apiSmmServicesPublic } from './api/smm'
 import { SERVICE_OVERRIDES } from './servicesOverrides'
 import { useToast } from './ui/toast'
+import { prependLocalOrder } from './localOrders'
 
 import type { Category, Platform, SmmService } from './types'
 
@@ -292,39 +293,15 @@ export default function Dashboard() {
       return
     }
 
-    const PROCESSING = new Set(['running', 'processing', 'in progress', 'inprogress'])
-    const REFUNDED = new Set(['refunded'])
-
     ;(async () => {
       setKpiLoading(true)
       try {
-        const limit = 50
-        let offset = 0
-        let total = 0
-        let spend = 0
-        let processing = 0
-
-        for (let guard = 0; guard < 300; guard++) {
-          const res = await apiOrdersHistory(token, { limit, offset })
-          if (cancelled) return
-          total = Number(res.total) || 0
-
-          for (const o of res.orders || []) {
-            const smmOrderId = (o as any).smmOrderId as string | null
-            const smmStatus = String((o as any).smmStatus || '').trim().toLowerCase()
-            const isPlaced = Boolean(smmOrderId) && !REFUNDED.has(smmStatus)
-            if (isPlaced) spend += Number((o as any).totalVnd) || 0
-            if (PROCESSING.has(smmStatus)) processing += 1
-          }
-
-          offset += limit
-          if (offset >= total) break
-          if (!res.orders || res.orders.length === 0) break
-        }
-
-        setKpiTotalOrders(total)
-        setKpiTotalSpendVnd(Math.max(0, Math.round(spend)))
-        setKpiProcessing(processing)
+        // One request for both history and KPI (server-side aggregation).
+        const res = await apiOrdersSummary(token, { limit: 1, offset: 0 })
+        if (cancelled) return
+        setKpiTotalOrders(Number(res.kpi?.totalOrders) || 0)
+        setKpiTotalSpendVnd(Math.max(0, Math.round(Number(res.kpi?.totalSpendVnd) || 0)))
+        setKpiProcessing(Number(res.kpi?.processing) || 0)
       } catch {
         // keep KPI as-is on error
       } finally {
@@ -472,6 +449,31 @@ export default function Dashboard() {
       })
 
       setBalanceVnd(res.balanceVnd)
+      try {
+        const smmAny = res?.smm as any
+        const smmOrderId =
+          smmAny && typeof smmAny === 'object'
+            ? smmAny.order != null
+              ? String(smmAny.order)
+              : smmAny.data?.order != null
+                ? String(smmAny.data.order)
+                : null
+            : null
+        prependLocalOrder({
+          id: res.orderId,
+          serviceId: String(selectedService.id),
+          link: draft.targetLink.trim(),
+          quantity: Number(draft.quantity) || 0,
+          totalVnd: Number(res.chargedVnd) || 0,
+          smmOrderId,
+          smmStatus: smmOrderId ? 'running' : 'Pending',
+          refundedVnd: 0,
+          refundedAt: null,
+          createdAt: new Date().toISOString(),
+        })
+      } catch {
+        // ignore local history failure
+      }
       setDraft((d) => ({
         ...d,
         targetLink: '',

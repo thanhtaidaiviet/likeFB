@@ -19,6 +19,7 @@ import adminTopup from './_lib/handlers/admin-topup.js'
 import debugEnv from './_lib/handlers/debug-env.js'
 import orders from './_lib/handlers/orders.js'
 import ordersHistory from './_lib/handlers/orders-history.js'
+import ordersSummary from './_lib/handlers/orders-summary.js'
 
 type H = (req: VercelRequest, res: VercelResponse) => Promise<void> | void
 
@@ -57,6 +58,7 @@ const localRoutes: Record<string, Partial<Record<string, H>>> = {
   'smm/refill_status': { GET: smmRefillStatus as H },
   orders: { POST: orders as H },
   'orders/history': { GET: ordersHistory as H },
+  'orders/summary': { GET: ordersSummary as H },
   'admin/topup': { POST: adminTopup as H },
 }
 
