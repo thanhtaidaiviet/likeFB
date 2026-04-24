@@ -17,6 +17,8 @@ import smmRefill from './_lib/handlers/smm-refill.js'
 import smmRefillStatus from './_lib/handlers/smm-refill-status.js'
 import adminTopup from './_lib/handlers/admin-topup.js'
 import debugEnv from './_lib/handlers/debug-env.js'
+import orders from './_lib/handlers/orders.js'
+import ordersHistory from './_lib/handlers/orders-history.js'
 
 type H = (req: VercelRequest, res: VercelResponse) => Promise<void> | void
 
@@ -53,6 +55,8 @@ const localRoutes: Record<string, Partial<Record<string, H>>> = {
   'smm/cancel': { POST: smmCancel as H },
   'smm/refill': { POST: smmRefill as H },
   'smm/refill_status': { GET: smmRefillStatus as H },
+  orders: { POST: orders as H },
+  'orders/history': { GET: ordersHistory as H },
   'admin/topup': { POST: adminTopup as H },
 }
 
@@ -71,16 +75,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (upstream) {
       await proxyUpstream(upstream, path, req, res)
       return
-    }
-
-    if (/^(orders|admin)/.test(path)) {
-      return sendJson(res, 503, {
-        error: 'MISSING_UPSTREAM_API',
-        detail:
-          'Add env LIKEFB_SMM_API_BASE_URL (origin of likefb-smm-api, no trailing slash) on this Vercel project so orders and admin routes are proxied.',
-        path,
-        method,
-      })
     }
 
     return sendJson(res, 404, {
