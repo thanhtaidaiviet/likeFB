@@ -9,6 +9,10 @@ export default function Header({
   menuButtonRef,
   onLoginClick,
   onLogoutClick,
+  onTopupClick,
+  supportTelegramUrl,
+  hotline,
+  apiResellerUrl,
   lang,
   onLangChange,
   darkMode,
@@ -21,6 +25,10 @@ export default function Header({
   menuButtonRef?: React.Ref<HTMLButtonElement>
   onLoginClick(): void
   onLogoutClick(): void
+  onTopupClick(): void
+  supportTelegramUrl?: string
+  hotline?: string
+  apiResellerUrl?: string
   lang: 'vi' | 'en'
   onLangChange(lang: 'vi' | 'en'): void
   darkMode: boolean
@@ -79,6 +87,55 @@ export default function Header({
         </div>
 
         <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
+          <div className="hidden items-center gap-2 lg:flex">
+            <div className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-extrabold text-emerald-800 ring-1 ring-inset ring-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-200 dark:ring-emerald-800">
+              +12.000 khách hàng
+            </div>
+            <div className="text-xs font-extrabold tracking-tight text-slate-900 dark:text-slate-100">
+              Tăng Like TikTok Uy Tín #1 Việt Nam
+            </div>
+          </div>
+
+          {supportTelegramUrl ? (
+            <a
+              href={supportTelegramUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="hidden h-10 items-center justify-center rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-800 shadow-sm hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100 dark:hover:bg-slate-900 sm:inline-flex"
+            >
+              Telegram
+            </a>
+          ) : null}
+
+          {hotline ? (
+            <a
+              href={`tel:${hotline.replace(/\s+/g, '')}`}
+              className="hidden h-10 items-center justify-center rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-800 shadow-sm hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100 dark:hover:bg-slate-900 sm:inline-flex"
+              title={hotline}
+            >
+              Hotline
+            </a>
+          ) : null}
+
+          {apiResellerUrl ? (
+            <a
+              href={apiResellerUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="hidden h-10 items-center justify-center rounded-lg border border-indigo-200 bg-indigo-50 px-3 text-sm font-extrabold text-indigo-900 shadow-sm hover:bg-indigo-100/70 dark:border-indigo-500/40 dark:bg-indigo-950/40 dark:text-indigo-100 dark:hover:bg-indigo-950/60 sm:inline-flex"
+            >
+              API Reseller
+            </a>
+          ) : null}
+
+          <button
+            type="button"
+            onClick={onTopupClick}
+            className="hidden h-10 items-center justify-center rounded-lg bg-amber-500 px-3 text-sm font-extrabold text-amber-950 shadow-sm hover:bg-amber-400 sm:inline-flex"
+          >
+            Nạp tiền
+          </button>
+
           <ToolbarLanguageSelect lang={lang} onLangChange={onLangChange} />
           <ToolbarThemeButton
             darkMode={darkMode}
@@ -100,13 +157,22 @@ export default function Header({
                 {t.logout}
               </button>
             ) : (
-              <button
-                type="button"
-                onClick={onLoginClick}
-                className="inline-flex items-center justify-center rounded-lg bg-sky-600 px-3 py-2 text-sm font-semibold text-white hover:bg-sky-700"
-              >
-                {t.login}
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={onLoginClick}
+                  className="inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100 dark:hover:bg-slate-900"
+                >
+                  Đăng ký
+                </button>
+                <button
+                  type="button"
+                  onClick={onLoginClick}
+                  className="inline-flex items-center justify-center rounded-lg bg-sky-600 px-3 py-2 text-sm font-extrabold text-white hover:bg-sky-700"
+                >
+                  {t.login}
+                </button>
+              </div>
             )}
           </div>
 
@@ -128,6 +194,58 @@ export default function Header({
                 {t.login}
               </button>
             )}
+          </div>
+        </div>
+      </div>
+
+      <div className="border-t border-slate-200/60 px-4 py-2 sm:px-6 lg:hidden dark:border-slate-700/70">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <div className="rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-extrabold text-emerald-800 ring-1 ring-inset ring-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-200 dark:ring-emerald-800">
+              +12.000 khách hàng
+            </div>
+            <div className="text-[11px] font-extrabold tracking-tight text-slate-900 dark:text-slate-100">
+              Tăng Like TikTok Uy Tín #1 Việt Nam
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {supportTelegramUrl ? (
+              <a
+                href={supportTelegramUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex h-9 items-center justify-center rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-800 shadow-sm hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100 dark:hover:bg-slate-900"
+              >
+                Telegram
+              </a>
+            ) : null}
+            {hotline ? (
+              <a
+                href={`tel:${hotline.replace(/\s+/g, '')}`}
+                className="inline-flex h-9 items-center justify-center rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-800 shadow-sm hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100 dark:hover:bg-slate-900"
+                title={hotline}
+              >
+                Hotline
+              </a>
+            ) : null}
+            {apiResellerUrl ? (
+              <a
+                href={apiResellerUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex h-9 items-center justify-center rounded-lg border border-indigo-200 bg-indigo-50 px-3 text-xs font-extrabold text-indigo-900 shadow-sm hover:bg-indigo-100/70 dark:border-indigo-500/40 dark:bg-indigo-950/40 dark:text-indigo-100 dark:hover:bg-indigo-950/60"
+              >
+                API Reseller
+              </a>
+            ) : null}
+            <button
+              type="button"
+              onClick={onTopupClick}
+              className="inline-flex h-9 items-center justify-center rounded-lg bg-amber-500 px-3 text-xs font-extrabold text-amber-950 shadow-sm hover:bg-amber-400"
+            >
+              Nạp tiền
+            </button>
           </div>
         </div>
       </div>
