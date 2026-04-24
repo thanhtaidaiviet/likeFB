@@ -335,14 +335,27 @@ function formatRequestFailedMessage(opts: {
 }
 
 async function requestJson<T>(path: string, token: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(path, {
-    ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-      ...(init?.headers ?? {}),
-    },
-  })
+  let res: Response
+  try {
+    res = await fetch(path, {
+      ...init,
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+        ...(init?.headers ?? {}),
+      },
+    })
+  } catch (e: any) {
+    const msg = String(e?.message || '')
+    if (
+      msg === 'Failed to fetch' ||
+      msg === 'NetworkError' ||
+      /networkerror|load failed|failed to fetch/i.test(msg)
+    ) {
+      throw new Error('API_UNAVAILABLE')
+    }
+    throw new Error(msg || 'API_UNAVAILABLE')
+  }
   const data = await res.json().catch(() => null)
   if (!res.ok) {
     const code = (data && (data.error as string)) || 'REQUEST_FAILED'
@@ -361,13 +374,26 @@ async function requestJson<T>(path: string, token: string, init?: RequestInit): 
 }
 
 async function requestJsonPublic<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(path, {
-    ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(init?.headers ?? {}),
-    },
-  })
+  let res: Response
+  try {
+    res = await fetch(path, {
+      ...init,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(init?.headers ?? {}),
+      },
+    })
+  } catch (e: any) {
+    const msg = String(e?.message || '')
+    if (
+      msg === 'Failed to fetch' ||
+      msg === 'NetworkError' ||
+      /networkerror|load failed|failed to fetch/i.test(msg)
+    ) {
+      throw new Error('API_UNAVAILABLE')
+    }
+    throw new Error(msg || 'API_UNAVAILABLE')
+  }
   const text = await res.text().catch(() => '')
 
   let data: any = null

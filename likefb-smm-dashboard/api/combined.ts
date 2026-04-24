@@ -16,6 +16,7 @@ import smmCancel from './_lib/handlers/smm-cancel.js'
 import smmRefill from './_lib/handlers/smm-refill.js'
 import smmRefillStatus from './_lib/handlers/smm-refill-status.js'
 import adminTopup from './_lib/handlers/admin-topup.js'
+import debugEnv from './_lib/handlers/debug-env.js'
 
 type H = (req: VercelRequest, res: VercelResponse) => Promise<void> | void
 
@@ -39,6 +40,7 @@ function getApiPath(req: VercelRequest): string {
 
 const localRoutes: Record<string, Partial<Record<string, H>>> = {
   health: { GET: health as H },
+  'debug/env': { GET: debugEnv as H },
   auth: { POST: authUnified as H },
   'auth/register': { POST: authRegister as H },
   'auth/login': { POST: authLogin as H },
@@ -55,34 +57,39 @@ const localRoutes: Record<string, Partial<Record<string, H>>> = {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  const path = getApiPath(req)
-  const method = (req.method || 'GET').toUpperCase()
+  try {
+    const path = getApiPath(req)
+    const method = (req.method || 'GET').toUpperCase()
 
-  const sub = localRoutes[path]?.[method]
-  if (sub) {
-    await sub(req, res)
-    return
-  }
+    const sub = localRoutes[path]?.[method]
+    if (sub) {
+      await sub(req, res)
+      return
+    }
 
-  const upstream = upstreamBaseFromEnv()
-  if (upstream) {
-    await proxyUpstream(upstream, path, req, res)
-    return
-  }
+    const upstream = upstreamBaseFromEnv()
+    if (upstream) {
+      await proxyUpstream(upstream, path, req, res)
+      return
+    }
 
-  if (/^(orders|admin)/.test(path)) {
-    return sendJson(res, 503, {
-      error: 'MISSING_UPSTREAM_API',
-      detail:
-        'Add env LIKEFB_SMM_API_BASE_URL (origin of likefb-smm-api, no trailing slash) on this Vercel project so orders and admin routes are proxied.',
+    if (/^(orders|admin)/.test(path)) {
+      return sendJson(res, 503, {
+        error: 'MISSING_UPSTREAM_API',
+        detail:
+          'Add env LIKEFB_SMM_API_BASE_URL (origin of likefb-smm-api, no trailing slash) on this Vercel project so orders and admin routes are proxied.',
+        path,
+        method,
+      })
+    }
+
+    return sendJson(res, 404, {
+      error: 'NOT_FOUND',
       path,
       method,
     })
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e ?? 'UNKNOWN')
+    return sendJson(res, 500, { error: 'UNHANDLED', detail: msg })
   }
-
-  return sendJson(res, 404, {
-    error: 'NOT_FOUND',
-    path,
-    method,
-  })
 }
