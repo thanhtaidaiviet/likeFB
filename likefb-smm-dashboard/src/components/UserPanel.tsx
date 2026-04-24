@@ -217,7 +217,10 @@ export default function UserPanel({
     <div className="grid gap-4">
       <div id="order-history" className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900">
         <div className="flex items-center justify-between gap-3">
-          <div className="text-sm font-semibold text-slate-900 dark:text-slate-100">Lịch sử đặt hàng</div>
+          <div className="flex items-center gap-2 text-sm font-semibold text-slate-900 dark:text-slate-100">
+            <img src="/logo.svg" alt="LikeTikTok.xyz" className="size-5" />
+            <span>Lịch sử đặt hàng</span>
+          </div>
           <div className="flex items-center gap-2">
             <div className="hidden text-xs font-semibold text-slate-600 sm:block dark:text-slate-300">Hiển thị:</div>
             <select

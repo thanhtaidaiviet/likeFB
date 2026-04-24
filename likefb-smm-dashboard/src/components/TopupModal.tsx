@@ -66,7 +66,10 @@ export default function TopupModal({ open, onClose, userEmail }: TopupModalProps
         <div className="flex max-h-[calc(100vh-1.5rem)] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl sm:max-h-[calc(100vh-2rem)]">
           <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-3 sm:px-5 sm:py-4">
             <div className="min-w-0">
-              <div className="truncate text-base font-semibold text-slate-900">Nạp tiền (MoMo)</div>
+              <div className="flex items-center gap-2">
+                <img src="/logo.svg" alt="LikeTikTok.xyz" className="size-5" />
+                <div className="truncate text-base font-semibold text-slate-900">Nạp tiền (MoMo)</div>
+              </div>
               <div className="mt-0.5 text-sm text-slate-600">
                 Quét QR hoặc chuyển khoản theo thông tin bên dưới.
               </div>

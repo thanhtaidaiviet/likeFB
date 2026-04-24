@@ -167,7 +167,7 @@ export default function Dashboard() {
   const adminTopupEmailInputRef = useRef<HTMLInputElement | null>(null)
 
   const [placingOrder, setPlacingOrder] = useState(false)
-  const [freePlatform, setFreePlatform] = useState<'Facebook' | 'TikTok' | 'Instagram' | 'YouTube' | 'Telegram'>(
+  const [freePlatform, setFreePlatform] = useState<'Facebook' | 'TikTok' | 'YouTube' | 'Telegram'>(
     'Facebook',
   )
   const [freeLink, setFreeLink] = useState('')
@@ -422,34 +422,21 @@ export default function Dashboard() {
   }, [draft.serviceId])
 
   const freeServiceIdByPlatform = useMemo(() => {
-    const instagram = (import.meta.env.VITE_FREE_LIKE_INSTAGRAM_SERVICE_ID as string | undefined) || ''
     return {
       Facebook: '4122',
       TikTok: '4876',
       YouTube: '4874',
       Telegram: '4430',
-      Instagram: instagram.trim(),
     } as const
   }, [])
 
   const freeServiceId = freeServiceIdByPlatform[freePlatform]
-  const freeAllowedServiceIds = useMemo(() => {
-    const ids = new Set<string>(['4122', '4876', '4874', '4430'])
-    const ig = freeServiceIdByPlatform.Instagram
-    if (ig) ids.add(ig)
-    return ids
-  }, [freeServiceIdByPlatform.Instagram])
 
   const freeServicesForUi = useMemo(() => {
     const svcId = freeServiceId
     if (!svcId) return []
     const found = services.find((s) => s.id === svcId)
     return found ? [found] : []
-  }, [freeServiceId, services])
-
-  const freeSelectedService = useMemo(() => {
-    if (!freeServiceId) return null
-    return services.find((s) => s.id === freeServiceId) ?? null
   }, [freeServiceId, services])
 
   const freeMinQty = useMemo(() => {
@@ -468,7 +455,7 @@ export default function Dashboard() {
       toast({
         kind: 'error',
         title: 'Chưa sẵn sàng',
-        description: 'Chưa cấu hình dịch vụ miễn phí cho Instagram.',
+        description: 'Chưa sẵn sàng.',
         durationMs: 4000,
       })
       return
@@ -791,9 +778,14 @@ export default function Dashboard() {
                 <div ref={overviewRegionRef} className="space-y-5">
                 <div className="grid gap-4 lg:grid-cols-[1.6fr_1fr]">
                 <div className="rounded-2xl border border-slate-200 bg-gradient-to-br from-violet-600 via-indigo-600 to-fuchsia-600 p-5 text-white shadow-sm dark:border-slate-800">
-                  <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-white/80">
-                    <span className="rounded-full bg-white/15 px-2 py-0.5">Chào mừng</span>
-                    <span className="rounded-full bg-white/15 px-2 py-0.5">Starter</span>
+                  <div className="inline-flex items-center gap-3 rounded-2xl bg-white px-3 py-2 text-slate-900 shadow-sm">
+                    <div className="grid size-10 place-items-center rounded-2xl bg-gradient-to-br from-violet-600 via-indigo-600 to-fuchsia-600 text-white">
+                      <img src="/logo.svg" alt="LikeTikTok.xyz" className="size-6" />
+                    </div>
+                    <div className="leading-tight">
+                      <div className="text-sm font-extrabold">LikeTikTok.xyz</div>
+                      <div className="text-[11px] font-semibold text-slate-600">Tăng tương tác mạng xã hội</div>
+                    </div>
                   </div>
                   <div className="mt-3 text-2xl font-extrabold leading-tight">
                     Chào {status === 'authed' ? (user?.email?.split('@')[0] ?? 'bạn') : 'bạn'}, sẵn sàng bứt phá chưa?
@@ -829,8 +821,9 @@ export default function Dashboard() {
                 </div>
 
                 <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
-                  <div className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                    Số dư ví
+                  <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                    <img src="/logo.svg" alt="LikeTikTok.xyz" className="size-4" />
+                    <span>Số dư ví</span>
                   </div>
                   <div className="mt-1 flex items-end justify-between gap-3">
                     <div className="text-3xl font-extrabold text-slate-900 dark:text-slate-50">{formatVnd(balanceVnd)}</div>
@@ -951,9 +944,9 @@ export default function Dashboard() {
 
               <div className="rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
                 <div className="border-b border-slate-200 px-4 py-3 sm:px-6 dark:border-slate-700">
-                  <div className="text-base font-semibold text-slate-900 dark:text-slate-50">Tăng like miễn phí</div>
-                  <div className="mt-1 text-sm text-slate-600 dark:text-slate-300">
-                    Chọn nền tảng và nhập link. Số lượng tự lấy Min và không cho chỉnh sửa.
+                  <div className="flex items-center gap-2 text-base font-semibold text-slate-900 dark:text-slate-50">
+                    <img src="/logo.svg" alt="LikeTikTok.xyz" className="size-5" />
+                    <span>Tăng like miễn phí</span>
                   </div>
                 </div>
                 <div className="grid gap-4 p-4 sm:p-6 md:grid-cols-2">
@@ -967,7 +960,7 @@ export default function Dashboard() {
                         onChange={(e) => setFreePlatform(e.target.value as any)}
                         className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm shadow-sm outline-none focus:ring-2 focus:ring-indigo-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                       >
-                        {(['Facebook', 'TikTok', 'Instagram', 'YouTube', 'Telegram'] as const).map((p) => (
+                        {(['Facebook', 'TikTok', 'YouTube', 'Telegram'] as const).map((p) => (
                           <option key={p} value={p}>
                             {p}
                           </option>
@@ -992,18 +985,10 @@ export default function Dashboard() {
                           ))
                         ) : (
                           <option value="" disabled>
-                            {freeServiceId
-                              ? `Service ${freeServiceId} chưa tải được từ danh sách`
-                              : freePlatform === 'Instagram'
-                                ? 'Chưa cấu hình service Instagram'
-                                : '—'}
+                            {freeServiceId ? `Service ${freeServiceId} chưa tải được từ danh sách` : '—'}
                           </option>
                         )}
                       </select>
-                      <div className="mt-2 text-xs text-slate-500 dark:text-slate-400">
-                        Chỉ hiển thị các dịch vụ miễn phí cố định:{' '}
-                        {Array.from(freeAllowedServiceIds).sort().join(', ')}
-                      </div>
                     </div>
 
                     <div>
@@ -1032,16 +1017,6 @@ export default function Dashboard() {
                             className="mt-1 h-10 w-full cursor-not-allowed rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-800 opacity-80 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                           />
                         </div>
-                        <div>
-                          <div className="text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-400">
-                            Giới hạn
-                          </div>
-                          <div className="mt-1 h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold leading-10 text-slate-800 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
-                            {freeSelectedService
-                              ? `Min ${freeSelectedService.min.toLocaleString('vi-VN')} • Max ${freeSelectedService.max.toLocaleString('vi-VN')}`
-                              : '—'}
-                          </div>
-                        </div>
                       </div>
 
                       <button
@@ -1057,9 +1032,6 @@ export default function Dashboard() {
                       >
                         {freeBusy ? 'Đang gửi...' : 'Nhận like miễn phí'}
                       </button>
-                      <div className="text-xs text-slate-600 dark:text-slate-300">
-                        Lưu ý: Bạn cần đăng nhập để sử dụng. Instagram có thể cần cấu hình service ID.
-                      </div>
                     </div>
                   </div>
                 </div>
