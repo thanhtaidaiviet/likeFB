@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { apiOrdersCheckStatus, apiOrdersSummary } from '../api/smm'
-import { loadLocalOrders, type LocalOrderRow } from '../localOrders'
+import { loadLocalOrders } from '../localOrders'
 
 export default function UserPanel({
   userId: _userId,
