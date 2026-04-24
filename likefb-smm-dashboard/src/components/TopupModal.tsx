@@ -62,9 +62,9 @@ export default function TopupModal({ open, onClose, userEmail }: TopupModalProps
         tabIndex={0}
         aria-label="Đóng"
       />
-      <div className="absolute inset-0 flex items-center justify-center p-4">
-        <div className="w-full max-w-2xl rounded-2xl border border-slate-200 bg-white shadow-xl">
-          <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-5 py-4">
+      <div className="absolute inset-0 flex items-center justify-center p-3 sm:p-4">
+        <div className="flex max-h-[calc(100vh-1.5rem)] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl sm:max-h-[calc(100vh-2rem)]">
+          <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-3 sm:px-5 sm:py-4">
             <div className="min-w-0">
               <div className="truncate text-base font-semibold text-slate-900">Nạp tiền (MoMo)</div>
               <div className="mt-0.5 text-sm text-slate-600">
@@ -81,8 +81,9 @@ export default function TopupModal({ open, onClose, userEmail }: TopupModalProps
             </button>
           </div>
 
-          <div className="grid gap-5 p-5 md:grid-cols-[280px_1fr]">
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+          <div className="min-h-0 overflow-y-auto">
+            <div className="grid gap-4 p-4 sm:gap-5 sm:p-5 md:grid-cols-[280px_1fr]">
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
               <div className="text-xs font-semibold uppercase tracking-wide text-slate-600">
                 QR MoMo
               </div>
@@ -91,7 +92,7 @@ export default function TopupModal({ open, onClose, userEmail }: TopupModalProps
                   <img
                     src={qrUrl}
                     alt="QR MoMo"
-                    className="h-auto w-full object-contain"
+                    className="h-auto max-h-[44vh] w-full object-contain md:max-h-none"
                     loading="lazy"
                   />
                 ) : (
@@ -163,6 +164,7 @@ export default function TopupModal({ open, onClose, userEmail }: TopupModalProps
                 </button>
               </div>
             </div>
+            </div>
           </div>
         </div>
       </div>
@@ -184,9 +186,9 @@ function Field({
   onCopy(): void
 }) {
   return (
-    <div className="grid grid-cols-[110px_1fr_auto] items-start gap-3">
-      <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</div>
-      <div className="min-w-0 text-sm font-semibold text-slate-800">
+    <div className="grid grid-cols-1 items-start gap-2 sm:grid-cols-[110px_1fr_auto] sm:gap-3">
+      <div className="text-xs font-semibold uppercase tracking-wide text-slate-500 sm:pt-1">{label}</div>
+      <div className="min-w-0 text-sm font-semibold text-slate-800 sm:pt-0.5">
         <span className={['break-words whitespace-normal', valueClassName || ''].join(' ')}>
           {value}
         </span>
@@ -196,7 +198,7 @@ function Field({
         onClick={onCopy}
         disabled={Boolean(disabled)}
         className={[
-          'inline-flex h-8 items-center justify-center rounded-lg border px-3 text-xs font-semibold',
+          'inline-flex h-9 w-full items-center justify-center rounded-lg border px-3 text-xs font-semibold sm:h-8 sm:w-auto',
           disabled
             ? 'cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400'
             : 'border-slate-200 bg-white text-slate-800 hover:bg-slate-50',

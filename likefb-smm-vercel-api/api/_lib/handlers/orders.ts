@@ -6,6 +6,7 @@ import {
   ordersActionSchema,
   handleQuote,
   handleCheckStatus,
+  handleFreeLike,
   handlePlace,
 } from '../orders.js'
 
@@ -33,6 +34,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (body.action === 'checkStatus') {
       const out = await handleCheckStatus({ userId: jwt.sub, orderId: body.orderId })
+      return sendJson(res, out.status, out.body)
+    }
+
+    if (body.action === 'freeLike') {
+      const out = await handleFreeLike({ userId: jwt.sub, platform: body.platform, link: body.link })
       return sendJson(res, out.status, out.body)
     }
 

@@ -16,6 +16,6 @@ export const SERVICE_OVERRIDES: Record<string, ServiceOverride> = {
   // Example:
   // '4042': { hidden: false, category: 'Likes', markupMultiplier: 1.5 },
   // Listed by upstream but rejects `action=add` with "Service ID does not exists".
-  '4042': { hidden: true },
+  '4042': { hidden: false },
 }
 

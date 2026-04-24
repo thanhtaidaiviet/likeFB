@@ -76,6 +76,13 @@ export const ordersActionSchema = z.discriminatedUnion('action', [
     .strict(),
   z
     .object({
+      action: z.literal('freeLike'),
+      platform: z.enum(['Facebook', 'TikTok', 'Instagram', 'YouTube', 'Telegram']),
+      link: z.string().min(1),
+    })
+    .strict(),
+  z
+    .object({
       action: z.literal('place'),
       service: z.union([z.string(), z.number()]),
       link: z.string().min(1),
@@ -314,6 +321,98 @@ export async function handlePlace(args: {
     }
 
     return { status: 200, body: { ok: true, orderId, smm: upstream, chargedVnd, balanceVnd: newBal } }
+  } catch (e) {
+    await client.query('rollback').catch(() => {})
+    throw e
+  } finally {
+    client.release()
+  }
+}
+
+export async function handleFreeLike(args: { userId: string; platform: string; link: string }) {
+  const SERVICE_BY_PLATFORM: Record<string, string> = {
+    Facebook: '4122',
+    TikTok: '4876',
+    YouTube: '4874',
+    Telegram: '4430',
+    // Instagram service id not provided; allow overriding by env.
+    Instagram: String(process.env.FREE_LIKE_INSTAGRAM_SERVICE_ID || ''),
+  }
+
+  const serviceId = String(SERVICE_BY_PLATFORM[args.platform] || '').trim()
+  if (!serviceId) return { status: 400, body: { error: 'SERVICE_NOT_CONFIGURED' } }
+
+  const info = await getPanelRateVndPer1k(serviceId)
+  if (!info) return { status: 404, body: { error: 'SERVICE_NOT_FOUND' } }
+
+  const qty = Math.max(1, Math.trunc(Number(info.min) || 1))
+  const link = args.link.trim()
+
+  const client = await getPool().connect()
+  try {
+    const id = crypto.randomUUID()
+    await client.query('begin')
+
+    let upstream: any = null
+    let smmOrderId: string | null = null
+    let errorCode: string | null = null
+    let errorDetail: string | null = null
+    let smmStatus: string | null = 'Pending'
+
+    try {
+      upstream = (await smmRequest({
+        key: smmApiKey(),
+        action: 'add',
+        service: serviceId,
+        link,
+        quantity: String(qty),
+      })) as any
+      smmOrderId = upstream && typeof upstream === 'object' && 'order' in upstream ? String((upstream as any).order) : null
+      smmStatus = smmOrderId ? 'running' : 'Pending'
+    } catch (e: any) {
+      errorDetail = String(e?.message || 'SMM_FAILED')
+      errorCode = String(errorDetail).startsWith('SMM_ERROR:') ? 'SMM_ERROR' : 'SMM_FAILED'
+      smmStatus = 'rejected'
+    }
+
+    await client.query(
+      `insert into free_like_orders
+        (id, user_id, platform, smm_service_id, link, quantity, smm_order_id, smm_status, smm_status_raw, error_code, error_detail)
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+      [
+        id,
+        args.userId,
+        args.platform,
+        serviceId,
+        link,
+        qty,
+        smmOrderId,
+        smmStatus,
+        upstream ? JSON.stringify(upstream) : null,
+        errorCode,
+        errorDetail,
+      ],
+    )
+
+    await client.query('commit')
+
+    if (smmStatus === 'rejected') {
+      return { status: 400, body: { ok: false, error: 'SMM_REJECTED', detail: errorDetail } }
+    }
+
+    return {
+      status: 200,
+      body: {
+        ok: true,
+        free: true,
+        orderId: id,
+        platform: args.platform,
+        serviceId,
+        quantity: qty,
+        smmOrderId,
+        smmStatus,
+      },
+    }
   } catch (e) {
     await client.query('rollback').catch(() => {})
     throw e

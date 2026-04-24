@@ -3,6 +3,22 @@
     {
       "source": "/api/(.*)",
       "destination": "/api/combined?path=$1"
+    },
+    {
+      "source": "/tang-like-tiktok",
+      "destination": "/tang-like-tiktok.html"
+    },
+    {
+      "source": "/tang-tuong-tac",
+      "destination": "/tang-tuong-tac.html"
+    },
+    {
+      "source": "/live-tiktok",
+      "destination": "/live-tiktok.html"
+    },
+    {
+      "source": "/tang-like-facebook",
+      "destination": "/tang-like-facebook.html"
     }
   ]
 }

@@ -17,6 +17,7 @@ import { apiAdminTopup, apiOrdersPlace, apiOrdersSummary, apiSmmServicesPublic }
 import { SERVICE_OVERRIDES } from './servicesOverrides'
 import { useToast } from './ui/toast'
 import { prependLocalOrder } from './localOrders'
+import { apiFreeLike } from './api/smm'
 
 import type { Category, Platform, SmmService } from './types'
 
@@ -166,6 +167,11 @@ export default function Dashboard() {
   const adminTopupEmailInputRef = useRef<HTMLInputElement | null>(null)
 
   const [placingOrder, setPlacingOrder] = useState(false)
+  const [freePlatform, setFreePlatform] = useState<'Facebook' | 'TikTok' | 'Instagram' | 'YouTube' | 'Telegram'>(
+    'Facebook',
+  )
+  const [freeLink, setFreeLink] = useState('')
+  const [freeBusy, setFreeBusy] = useState(false)
   const orderSectionRef = useRef<HTMLDivElement | null>(null)
   const overviewRegionRef = useRef<HTMLDivElement | null>(null)
   const mainScrollRef = useRef<HTMLElement | null>(null)
@@ -415,6 +421,64 @@ export default function Dashboard() {
     return services.find((s) => s.id === draft.serviceId) ?? null
   }, [draft.serviceId])
 
+  const freeServiceIdByPlatform = useMemo(() => {
+    const instagram = (import.meta.env.VITE_FREE_LIKE_INSTAGRAM_SERVICE_ID as string | undefined) || ''
+    return {
+      Facebook: '4122',
+      TikTok: '4876',
+      YouTube: '4874',
+      Telegram: '4430',
+      Instagram: instagram.trim(),
+    } as const
+  }, [])
+
+  const freeServiceId = freeServiceIdByPlatform[freePlatform]
+  const freeMinQty = useMemo(() => {
+    if (!freeServiceId) return 0
+    const svc = services.find((s) => s.id === freeServiceId) || null
+    return svc ? Number(svc.min) || 0 : 0
+  }, [freeServiceId, services])
+
+  async function handleFreeLikeSubmit() {
+    if (!token) return openLogin()
+    if (freeBusy) return
+    if (!freeLink.trim()) {
+      toast({ kind: 'error', title: 'Thiếu thông tin', description: 'Vui lòng nhập Link cần tăng.', durationMs: 3500 })
+      return
+    }
+    if (!freeServiceId) {
+      toast({
+        kind: 'error',
+        title: 'Chưa sẵn sàng',
+        description: 'Chưa cấu hình dịch vụ miễn phí cho Instagram.',
+        durationMs: 4000,
+      })
+      return
+    }
+
+    setFreeBusy(true)
+    try {
+      const res = await apiFreeLike(token, { platform: freePlatform, link: freeLink.trim() })
+      if (res && (res as any).ok === false) throw new Error(String((res as any).detail || (res as any).error || 'FAILED'))
+      toast({
+        kind: 'success',
+        title: 'Đã gửi yêu cầu miễn phí',
+        description: `Nền tảng: ${freePlatform} • SL: ${Math.max(0, freeMinQty).toLocaleString('vi-VN') || 'Min'}`,
+        durationMs: 4500,
+      })
+      setFreeLink('')
+    } catch (e: any) {
+      toast({
+        kind: 'error',
+        title: 'Thất bại',
+        description: String(e?.message || 'FREE_LIKE_FAILED'),
+        durationMs: 6000,
+      })
+    } finally {
+      setFreeBusy(false)
+    }
+  }
+
   const totalVnd = useMemo(() => {
     if (!selectedService) return 0
     const qty = parseQty(draft.quantity)
@@ -490,10 +554,9 @@ export default function Dashboard() {
       })
     } catch (e: any) {
       const raw = String(e?.message || 'ORDER_PLACE_FAILED')
-      const hint =
-        raw.includes('Service ID does not exists')
-          ? `${raw}\nGợi ý: Panel có thể yêu cầu SMM_COOKIE hoặc SMM_API_URL/SMM_API_KEY chưa đúng.`
-          : raw
+      const hint = raw.toLowerCase().includes('service id does not exists')
+        ? 'Hệ thống đang bảo trì, vui lòng thử lại sau.'
+        : raw
       toast({
         kind: 'error',
         title: 'Đặt hàng thất bại',
@@ -862,6 +925,89 @@ export default function Dashboard() {
                     onRequireAuth={openLogin}
                     submitting={placingOrder}
                   />
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
+                <div className="border-b border-slate-200 px-4 py-3 sm:px-6 dark:border-slate-700">
+                  <div className="text-base font-semibold text-slate-900 dark:text-slate-50">Tăng like miễn phí</div>
+                  <div className="mt-1 text-sm text-slate-600 dark:text-slate-300">
+                    Chọn nền tảng và nhập link. Số lượng tự lấy Min và không cho chỉnh sửa.
+                  </div>
+                </div>
+                <div className="grid gap-4 p-4 sm:p-6 md:grid-cols-2">
+                  <div className="grid gap-4">
+                    <div>
+                      <div className="text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-400">
+                        Nền tảng
+                      </div>
+                      <select
+                        value={freePlatform}
+                        onChange={(e) => setFreePlatform(e.target.value as any)}
+                        className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm shadow-sm outline-none focus:ring-2 focus:ring-indigo-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                      >
+                        {(['Facebook', 'TikTok', 'Instagram', 'YouTube', 'Telegram'] as const).map((p) => (
+                          <option key={p} value={p}>
+                            {p}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <div className="text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-400">
+                        Link cần tăng
+                      </div>
+                      <input
+                        value={freeLink}
+                        onChange={(e) => setFreeLink(e.target.value)}
+                        placeholder="https://..."
+                        className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm shadow-sm outline-none focus:ring-2 focus:ring-indigo-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-900/70">
+                    <div className="grid gap-4">
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <div className="text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-400">
+                            Dịch vụ
+                          </div>
+                          <div className="mt-1 h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold leading-10 text-slate-800 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
+                            {freeServiceId || '—'}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-400">
+                            Số lượng (Min)
+                          </div>
+                          <input
+                            value={freeMinQty ? String(freeMinQty) : '—'}
+                            disabled
+                            className="mt-1 h-10 w-full cursor-not-allowed rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-800 opacity-80 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                          />
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        disabled={freeBusy}
+                        onClick={() => void handleFreeLikeSubmit()}
+                        className={[
+                          'inline-flex h-11 items-center justify-center rounded-lg px-5 text-sm font-semibold shadow-sm transition',
+                          freeBusy
+                            ? 'cursor-not-allowed bg-indigo-400 text-white'
+                            : 'bg-indigo-600 text-white hover:bg-indigo-700',
+                        ].join(' ')}
+                      >
+                        {freeBusy ? 'Đang gửi...' : 'Nhận like miễn phí'}
+                      </button>
+                      <div className="text-xs text-slate-600 dark:text-slate-300">
+                        Lưu ý: Bạn cần đăng nhập để sử dụng. Instagram có thể cần cấu hình service ID.
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
 

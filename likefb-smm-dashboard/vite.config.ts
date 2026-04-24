@@ -1,6 +1,7 @@
 import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
+import { resolve } from 'node:path'
 
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
@@ -12,6 +13,17 @@ export default defineConfig(({ mode }) => {
     define: {
       // Vite only exposes VITE_* by default. Inject GOOGLE_CLIENT_ID for frontend usage.
       'import.meta.env.VITE_GOOGLE_CLIENT_ID': JSON.stringify(googleClientId),
+    },
+    build: {
+      rollupOptions: {
+        input: {
+          main: resolve(__dirname, 'index.html'),
+          tangLikeTikTok: resolve(__dirname, 'tang-like-tiktok.html'),
+          tangTuongTac: resolve(__dirname, 'tang-tuong-tac.html'),
+          liveTikTok: resolve(__dirname, 'live-tiktok.html'),
+          tangLikeFacebook: resolve(__dirname, 'tang-like-facebook.html'),
+        },
+      },
     },
     server: {
       proxy: {

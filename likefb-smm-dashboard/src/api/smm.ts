@@ -24,6 +24,19 @@ type OrdersPlaceResponse = {
   balanceVnd: number
 }
 
+type FreeLikeResponse = {
+  ok: boolean
+  free?: boolean
+  orderId?: string
+  platform?: string
+  serviceId?: string
+  quantity?: number
+  smmOrderId?: string | null
+  smmStatus?: string | null
+  error?: string
+  detail?: string
+}
+
 type OrdersHistoryResponse = {
   ok: boolean
   limit: number
@@ -491,6 +504,16 @@ export async function apiOrdersPlace(
   return await requestJson<OrdersPlaceResponse>('/api/orders', token, {
     method: 'POST',
     body: JSON.stringify({ action: 'place', ...body }),
+  })
+}
+
+export async function apiFreeLike(
+  token: string,
+  body: { platform: 'Facebook' | 'TikTok' | 'Instagram' | 'YouTube' | 'Telegram'; link: string },
+) {
+  return await requestJson<FreeLikeResponse>('/api/orders', token, {
+    method: 'POST',
+    body: JSON.stringify({ action: 'freeLike', ...body }),
   })
 }
 
