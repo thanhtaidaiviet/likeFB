@@ -34,3 +34,18 @@ export function describeDbError(err: any): DbErrorHint {
   return { kind: 'unknown', message }
 }
 
+export function toServerError(err: any): { status: number; body: Record<string, unknown> } {
+  const hint = describeDbError(err)
+  const status =
+    hint.kind === 'config' || hint.kind === 'network' || hint.kind === 'timeout'
+      ? 503
+      : hint.kind === 'pg' && hint.code === '42P01'
+        ? 503
+        : 500
+  const detail =
+    hint.kind === 'pg' && hint.code === '42P01'
+      ? 'DB is missing table(s). Run migrations (likefb-smm-api/src/db/migrate.ts) against DATABASE_URL.'
+      : hint.message || null
+  return { status, body: { error: 'SERVER_ERROR', detail, hint } }
+}
+

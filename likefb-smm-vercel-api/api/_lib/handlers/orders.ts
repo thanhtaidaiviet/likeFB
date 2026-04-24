@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { onlyMethods, readJsonBody, sendJson } from '../http.js'
 import { requireUser } from '../auth.js'
-import { describeDbError } from '../db-error.js'
+import { toServerError } from '../db-error.js'
 import {
   ordersActionSchema,
   handleQuote,
@@ -51,9 +51,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (msg.startsWith('SMM_') || msg.startsWith('SMM_ERROR:')) {
       return sendJson(res, 400, { error: 'SMM_REJECTED', detail: msg })
     }
-    const hint = describeDbError(err)
     console.error(err)
-    return sendJson(res, 500, { error: 'SERVER_ERROR', hint })
+    const out = toServerError(err)
+    return sendJson(res, out.status, out.body)
   }
 }
 

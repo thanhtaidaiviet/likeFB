@@ -2,7 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { onlyMethods, sendJson } from '../http.js'
 import { requireUser } from '../auth.js'
 import { getPool } from '../pool.js'
-import { describeDbError } from '../db-error.js'
+import { toServerError } from '../db-error.js'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!onlyMethods(req, res, ['GET'])) return
@@ -96,23 +96,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   } catch (err: any) {
     const msg = String(err?.message || 'UNKNOWN')
     if (msg === 'UNAUTHORIZED') return sendJson(res, 401, { error: 'UNAUTHORIZED' })
-    const hint = describeDbError(err)
     console.error(err)
-    const status =
-      hint.kind === 'config' || hint.kind === 'network' || hint.kind === 'timeout'
-        ? 503
-        : hint.kind === 'pg' && hint.code === '42P01'
-          ? 503
-          : 500
-    const detail =
-      hint.kind === 'pg' && hint.code === '42P01'
-        ? 'DB is missing table(s). Run migrations (likefb-smm-api/src/db/migrate.ts) against DATABASE_URL.'
-        : hint.kind === 'config'
-          ? hint.message || 'Database is not configured.'
-          : hint.kind === 'network' || hint.kind === 'timeout'
-            ? hint.message || 'Database connection failed.'
-            : hint.message || null
-    return sendJson(res, status, { error: 'SERVER_ERROR', detail, hint })
+    const out = toServerError(err)
+    return sendJson(res, out.status, out.body)
   }
 }
 
