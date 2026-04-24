@@ -1,0 +1,13 @@
+{
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": "/api/combined?path=$1"
+    },
+    {
+      "source": "/",
+      "destination": "/api/_root"
+    }
+  ]
+}
+
