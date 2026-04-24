@@ -53,6 +53,19 @@ export default function Header({
     <header className="border-b border-transparent">
       <div className="flex items-center justify-between gap-2 px-4 py-3 sm:gap-3 sm:px-6">
         <div className="flex min-w-0 items-center gap-2">
+          <a
+            href="/"
+            className="inline-flex shrink-0 items-center gap-2 rounded-lg px-1 py-1 text-slate-900 hover:bg-slate-100/70 dark:text-slate-100 dark:hover:bg-slate-800/70"
+            aria-label="LikeTikTok.xyz"
+          >
+            <img src="/logo.svg" alt="LikeTikTok.xyz" className="size-9" />
+            <div className="hidden leading-tight sm:block">
+              <div className="text-sm font-extrabold tracking-tight">LikeTikTok.xyz</div>
+              <div className="text-[11px] font-semibold text-slate-600 dark:text-slate-300">
+                {lang === 'en' ? 'Boost social engagement' : 'Tăng tương tác mạng xã hội'}
+              </div>
+            </div>
+          </a>
           <button
             type="button"
             onClick={onMenuClick}
